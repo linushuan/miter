@@ -75,6 +75,16 @@ void MdHighlighter::highlightBlock(const QString &text)
     QVector<BlockToken> blockTokens;
     BlockType blockType = BlockParser::classify(text, ctx, blockTokens);
 
+    auto computeContentOffset = [&]() {
+        int offset = 0;
+        for (const auto &token : blockTokens) {
+            if (token.type == TokenType::BlockquoteMark || token.type == TokenType::ListBullet) {
+                offset = qMax(offset, token.start + token.length);
+            }
+        }
+        return qBound(0, offset, textLen);
+    };
+
     // Override for setext heading
     if (isSetextH1 && blockType == BlockType::Normal) {
         blockTokens.clear();
@@ -101,6 +111,8 @@ void MdHighlighter::highlightBlock(const QString &text)
     }
 
     if (blockType == BlockType::Table) {
+        const int tableOffset = computeContentOffset();
+        const int tableLength = textLen - tableOffset;
         const bool isSeparator = tableSeparatorRe.match(text).hasMatch();
         bool isHeader = false;
         if (!isSeparator) {
@@ -108,12 +120,14 @@ void MdHighlighter::highlightBlock(const QString &text)
             isHeader = next.isValid() && tableSeparatorRe.match(next.text()).hasMatch();
         }
 
-        if (isSeparator) {
-            setFormat(0, textLen, formats_[TokenType::TableSeparator]);
-        } else if (isHeader) {
-            setFormat(0, textLen, formats_[TokenType::TableHeader]);
-        } else {
-            setFormat(0, textLen, formats_[TokenType::TableCell]);
+        if (tableLength > 0) {
+            if (isSeparator) {
+                setFormat(tableOffset, tableLength, formats_[TokenType::TableSeparator]);
+            } else if (isHeader) {
+                setFormat(tableOffset, tableLength, formats_[TokenType::TableHeader]);
+            } else {
+                setFormat(tableOffset, tableLength, formats_[TokenType::TableCell]);
+            }
         }
 
         for (const auto &token : blockTokens) {
@@ -128,20 +142,16 @@ void MdHighlighter::highlightBlock(const QString &text)
         blockType != BlockType::CodeFenceStart &&
         blockType != BlockType::CodeFenceEnd) {
 
-        int contentOffset = 0;
-        // Adjust offset for blockquote/list prefix
-        for (const auto &token : blockTokens) {
-            if (token.type == TokenType::BlockquoteMark ||
-                token.type == TokenType::ListBullet) {
-                contentOffset = token.start + token.length;
-            }
-        }
+        const int contentOffset = computeContentOffset();
 
         if (blockType == BlockType::LatexDisplayBody ||
             blockType == BlockType::LatexEnvBody) {
             // Only run LaTeX parser for math bodies
             QVector<InlineToken> latexTokens;
-            LatexParser::parseLatexBody(text, contentOffset, text.length() - contentOffset, latexTokens);
+            const int latexLen = textLen - contentOffset;
+            if (latexLen > 0) {
+                LatexParser::parseLatexBody(text, contentOffset, latexLen, latexTokens);
+            }
             for (const auto &token : latexTokens) {
                 if (formats_.contains(token.type))
                     setFormat(token.start, token.length, formats_[token.type]);

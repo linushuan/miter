@@ -59,9 +59,19 @@ private:
     QString         themeName_ = "dark";
     int             baseFontSize_ = 14;
     int             tabSize_ = 4;
+    int             cachedDocRevision_ = -1;
+    int             cachedWords_ = 0;
+    int             cachedChars_ = 0;
+    int             emittedWords_ = -1;
+    int             emittedChars_ = -1;
     QColor          currentLineBg_ = QColor("#2a2a3e");
     QColor          lineNumberFg_ = QColor("#585b70");
     QColor          lineNumberBg_ = QColor("#1e1e2e");
+
+    bool handleListIndentationKey(bool indentForward);
+    void renumberOrderedLists();
+    void restoreCursorInBlock(int blockNumber, int column);
+    void applyEditorFont(const QString &family, int pointSize);
 
     void updateLineNumberAreaWidth(int newBlockCount);
     void updateLineNumberArea(const QRect &rect, int dy);

@@ -7,7 +7,9 @@ void InlineParser::parse(const QString &text, int offset, const ContextStack &ct
     Q_UNUSED(ctx);
     tokens.clear();
 
-    State s{text, offset, text.length(), tokens};
+    const int end = static_cast<int>(text.length());
+    const int start = (offset < 0) ? 0 : ((offset > end) ? end : offset);
+    State s{text, start, end, tokens};
 
     while (s.pos < s.end) {
         if (tryEscape(s)) continue;

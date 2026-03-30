@@ -20,6 +20,23 @@
 #include <QAction>
 #include <QStyle>
 
+namespace {
+QIcon themeIcon(bool dark)
+{
+    const QStringList names = dark
+        ? QStringList{"weather-clear-night", "night-light", "weather-many-clouds-night"}
+        : QStringList{"weather-clear", "weather-sunny", "weather-few-clouds"};
+
+    for (const QString &name : names) {
+        const QIcon icon = QIcon::fromTheme(name);
+        if (!icon.isNull()) {
+            return icon;
+        }
+    }
+    return QIcon();
+}
+}
+
 MainWindow::MainWindow(const QStringList &filesToOpen, QWidget *parent)
     : QMainWindow(parent)
 {
@@ -36,6 +53,9 @@ MainWindow::MainWindow(const QStringList &filesToOpen, QWidget *parent)
     // Status bar
     statusBar_ = new QStatusBar(this);
     setStatusBar(statusBar_);
+    themeIndicatorLabel_ = new QLabel(this);
+    themeIndicatorLabel_->setMinimumWidth(20);
+    statusBar_->addPermanentWidget(themeIndicatorLabel_);
     refreshStatusBar();
 
     // Connect signals
@@ -322,7 +342,7 @@ void MainWindow::setupToolbar()
     connect(save, &QAction::triggered, this, &MainWindow::onSave);
 
     tb->addSeparator();
-    themeToggleAction_ = tb->addAction("Theme: Toggle");
+    themeToggleAction_ = tb->addAction(QIcon(), QString());
     connect(themeToggleAction_, &QAction::triggered, this, &MainWindow::onToggleTheme);
     refreshStatusBar();
 }
@@ -332,18 +352,33 @@ void MainWindow::refreshStatusBar()
     const QString theme = tabManager_ ? tabManager_->themeName() : QString("dark");
     const QString path = currentPath_.isEmpty() ? "Untitled" : currentPath_;
     statusBar_->showMessage(
-        QString("Ln %1, Col %2 | Words %3, Chars %4 | %5 | Theme: %6")
+        QString("Ln %1, Col %2 | Words %3, Chars %4 | %5")
             .arg(currentLine_)
             .arg(currentCol_)
             .arg(currentWords_)
             .arg(currentChars_)
             .arg(path)
-            .arg(theme)
     );
+
+    const bool dark = (theme == "dark");
+    if (themeIndicatorLabel_) {
+        const QIcon currentThemeIcon = themeIcon(dark);
+        if (!currentThemeIcon.isNull()) {
+            themeIndicatorLabel_->setPixmap(currentThemeIcon.pixmap(16, 16));
+            themeIndicatorLabel_->setText(QString());
+        } else {
+            themeIndicatorLabel_->setPixmap(QPixmap());
+            themeIndicatorLabel_->setText(dark ? QString::fromUtf8("🌙") : QString::fromUtf8("☀"));
+        }
+        themeIndicatorLabel_->setToolTip(dark ? "Dark theme" : "Light theme");
+    }
 
     if (themeToggleAction_) {
         const QString nextTheme = (theme == "white") ? "dark" : "white";
-        themeToggleAction_->setText(QString("Theme: %1").arg(nextTheme));
+        const QIcon nextThemeIcon = themeIcon(nextTheme == "dark");
+        themeToggleAction_->setIcon(nextThemeIcon);
+        themeToggleAction_->setText(QString());
+        themeToggleAction_->setToolTip(nextTheme == "dark" ? "Switch to dark theme" : "Switch to light theme");
     }
 }
 

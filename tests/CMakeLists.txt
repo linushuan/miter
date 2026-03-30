@@ -38,3 +38,21 @@ add_executable(test_editor
 target_include_directories(test_editor PRIVATE ../src)
 target_link_libraries(test_editor Qt6::Test Qt6::Widgets Qt6::Core Qt6::Gui)
 add_test(NAME editor_tests COMMAND test_editor)
+
+add_executable(test_md_editor
+    test_md_editor.cpp
+    ../src/editor/MdEditor.cpp
+    ../src/editor/LineNumberArea.cpp
+    ../src/highlight/MdHighlighter.cpp
+    ../src/parser/BlockParser.cpp
+    ../src/parser/InlineParser.cpp
+    ../src/parser/LatexParser.cpp
+    ../src/parser/ContextStack.cpp
+    ../src/config/Theme.cpp
+    ../src/config/Settings.cpp
+    ../src/util/CjkUtil.cpp
+    ../src/util/TomlParser.cpp
+)
+target_include_directories(test_md_editor PRIVATE ../src)
+target_link_libraries(test_md_editor Qt6::Test Qt6::Widgets Qt6::Core Qt6::Gui)
+add_test(NAME test_md_editor COMMAND test_md_editor)

@@ -17,7 +17,7 @@ struct Settings {
     bool    autoSave      = false;
     int     autoSaveInterval = 30;
     bool    showHardBreak = true;
-    int     tabSize       = 4;
+    int     tabSize       = 2;
 
     // Session
     bool    restoreSession = true;

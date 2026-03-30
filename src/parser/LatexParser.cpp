@@ -3,19 +3,21 @@
 
 bool LatexParser::parseInline(const QString &text, int &pos, QVector<InlineToken> &tokens)
 {
+    const int textLen = static_cast<int>(text.length());
+    if (pos < 0 || pos >= textLen) return false;
     if (text[pos] != '$') return false;
 
     // $$ is display math, not inline — don't handle here
-    if (pos + 1 < text.length() && text[pos + 1] == '$') return false;
+    if (pos + 1 < textLen && text[pos + 1] == '$') return false;
 
     if (!isValidInlineMathStart(text, pos)) return false;
 
     // Scan for closing $
     int start = pos;
     int contentStart = pos + 1;
-    for (int i = contentStart; i < text.length(); ++i) {
+    for (int i = contentStart; i < textLen; ++i) {
         // Skip escaped $
-        if (text[i] == '\\' && i + 1 < text.length() && text[i + 1] == '$') {
+        if (text[i] == '\\' && i + 1 < textLen && text[i + 1] == '$') {
             i++; // skip past \$
             continue;
         }
@@ -38,8 +40,11 @@ bool LatexParser::parseInline(const QString &text, int &pos, QVector<InlineToken
 
 void LatexParser::parseLatexBody(const QString &text, int start, int length, QVector<InlineToken> &tokens)
 {
-    int end = start + length;
-    int pos = start;
+    const int textLen = static_cast<int>(text.length());
+    const int clampedStart = (start < 0) ? 0 : ((start > textLen) ? textLen : start);
+    const int clampedLength = (length < 0) ? 0 : length;
+    const int end = qMin(textLen, clampedStart + clampedLength);
+    int pos = clampedStart;
 
     while (pos < end) {
         // \command
@@ -78,8 +83,9 @@ void LatexParser::parseLatexBody(const QString &text, int start, int length, QVe
 
 bool LatexParser::isValidInlineMathStart(const QString &text, int pos)
 {
+    const int textLen = static_cast<int>(text.length());
     // $ must not be followed by whitespace
-    if (pos + 1 >= text.length()) return false;
+    if (pos + 1 >= textLen) return false;
     if (text[pos + 1].isSpace()) return false;
 
     return true;
@@ -87,8 +93,9 @@ bool LatexParser::isValidInlineMathStart(const QString &text, int pos)
 
 int LatexParser::findMatchingBrace(const QString &text, int openPos)
 {
+    const int textLen = static_cast<int>(text.length());
     int depth = 0;
-    for (int i = openPos; i < text.length(); ++i) {
+    for (int i = openPos; i < textLen; ++i) {
         if (text[i] == '{') depth++;
         else if (text[i] == '}') {
             depth--;

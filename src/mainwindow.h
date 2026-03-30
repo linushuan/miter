@@ -8,6 +8,7 @@ class TabManager;
 class EditorWidget;
 class MdEditor;
 class QAction;
+class QLabel;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -42,6 +43,7 @@ private:
     QString currentPath_;
     MdEditor *statusEditor_ = nullptr;
     QAction *themeToggleAction_ = nullptr;
+    QLabel  *themeIndicatorLabel_ = nullptr;
 
     void setupShortcuts();
     void setupToolbar();

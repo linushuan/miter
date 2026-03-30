@@ -64,6 +64,18 @@ private slots:
         QCOMPARE(BlockParser::classify("> quote", ctx, tokens), BlockType::Blockquote);
     }
 
+    void testNestedBlockquoteDepthToken()
+    {
+        ContextStack ctx;
+        QVector<BlockToken> tokens;
+
+        QCOMPARE(BlockParser::classify("> > deep", ctx, tokens), BlockType::Blockquote);
+        QVERIFY(!tokens.isEmpty());
+        QCOMPARE(tokens[0].type, TokenType::BlockquoteMark);
+        QCOMPARE(tokens[0].start, 0);
+        QCOMPARE(tokens[0].length, 4);
+    }
+
     void testUnorderedList()
     {
         ContextStack ctx;
@@ -123,6 +135,65 @@ private slots:
 
         QCOMPARE(BlockParser::classify("$$x^2 + y^2$$", ctx, tokens), BlockType::LatexDisplayBody);
         QVERIFY(!tokens.isEmpty());
+    }
+
+    void testLatexDisplayInBlockquote()
+    {
+        ContextStack ctx;
+        QVector<BlockToken> tokens;
+
+        QCOMPARE(BlockParser::classify("> $$", ctx, tokens), BlockType::LatexDisplayStart);
+        QVERIFY(ctx.inLatex());
+        QCOMPARE(ctx.top().depth, 1);
+
+        QCOMPARE(BlockParser::classify("> E = mc^2", ctx, tokens), BlockType::LatexDisplayBody);
+        QCOMPARE(BlockParser::classify("> $$", ctx, tokens), BlockType::LatexDisplayEnd);
+        QVERIFY(!ctx.inLatex());
+    }
+
+    void testLatexDisplayInList()
+    {
+        ContextStack ctx;
+        QVector<BlockToken> tokens;
+
+        QCOMPARE(BlockParser::classify("- $$", ctx, tokens), BlockType::LatexDisplayStart);
+        QVERIFY(ctx.inLatex());
+        QVERIFY(ctx.top().listIndent > 0);
+
+        QCOMPARE(BlockParser::classify("  E = mc^2", ctx, tokens), BlockType::LatexDisplayBody);
+        QCOMPARE(BlockParser::classify("  $$", ctx, tokens), BlockType::LatexDisplayEnd);
+        QVERIFY(!ctx.inLatex());
+    }
+
+    void testCodeFenceInBlockquote()
+    {
+        ContextStack ctx;
+        QVector<BlockToken> tokens;
+
+        QCOMPARE(BlockParser::classify("> ```cpp", ctx, tokens), BlockType::CodeFenceStart);
+        QVERIFY(ctx.inCode());
+        QCOMPARE(ctx.top().depth, 1);
+
+        QCOMPARE(BlockParser::classify("> int x = 42;", ctx, tokens), BlockType::CodeFenceBody);
+        QCOMPARE(BlockParser::classify("> ```", ctx, tokens), BlockType::CodeFenceEnd);
+        QVERIFY(!ctx.inCode());
+    }
+
+    void testListInBlockquoteTokens()
+    {
+        ContextStack ctx;
+        QVector<BlockToken> tokens;
+
+        QCOMPARE(BlockParser::classify("> - item", ctx, tokens), BlockType::ListItem);
+
+        bool hasBlockquoteMark = false;
+        bool hasListBullet = false;
+        for (const auto &token : tokens) {
+            if (token.type == TokenType::BlockquoteMark) hasBlockquoteMark = true;
+            if (token.type == TokenType::ListBullet) hasListBullet = true;
+        }
+        QVERIFY(hasBlockquoteMark);
+        QVERIFY(hasListBullet);
     }
 
     void testBlankLine()
