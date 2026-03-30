@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 linushuan
+
 #include "TabManager.h"
 #include "EditorWidget.h"
 #include "MdEditor.h"

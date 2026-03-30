@@ -56,6 +56,19 @@ User settings are saved at:
 
 `~/.config/mded/config.toml`
 
+## Acknowledgements
+
+This project was developed with AI assistance. The following projects were referenced for design decisions and architecture during development:
+
+- [Ghostwriter](https://github.com/KDE/ghostwriter) (GPL-3.0) - editor structure, line number area, focus mode
+- [QOwnNotes](https://github.com/pbek/QOwnNotes) (GPL-2.0) - syntax highlighter design
+- [Zettlr](https://github.com/Zettlr/Zettlr) (GPL-3.0) - CJK text handling, display math state
+- [lite-xl](https://github.com/lite-xl/lite-xl) (MIT) - UI minimalism philosophy
+- [render-markdown.nvim](https://github.com/MeanderingProgrammer/render-markdown.nvim) (MIT) - token color semantics
+- [Marktext](https://github.com/marktext/marktext) (MIT) - theme structure
+
+See [NOTICE](./NOTICE) for full copyright notices.
+
 ## License
 
 GPL-3.0

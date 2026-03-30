@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 linushuan
+
 #include "MdEditor.h"
 #include "LineNumberArea.h"
 #include "highlight/MdHighlighter.h"

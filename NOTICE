@@ -1,0 +1,29 @@
+mded — Minimal Markdown Editor
+Copyright (C) 2026 linushuan
+
+This project was developed with AI assistance and may incorporate patterns
+or structures similar to the following open source projects:
+
+Ghostwriter
+Copyright (C) 2014-2024 KDE Contributors
+Licensed under GPL-3.0 — https://github.com/KDE/ghostwriter
+
+QOwnNotes
+Copyright (C) 2014-2024 Patrizio Bekerle
+Licensed under GPL-2.0 — https://github.com/pbek/QOwnNotes
+
+Zettlr
+Copyright (C) 2017-2024 Hendrik Erz
+Licensed under GPL-3.0 — https://github.com/Zettlr/Zettlr
+
+lite-xl
+Copyright (C) 2019-2024 lite-xl contributors
+Licensed under MIT — https://github.com/lite-xl/lite-xl
+
+render-markdown.nvim
+Copyright (C) 2024 MeanderingProgrammer
+Licensed under MIT — https://github.com/MeanderingProgrammer/render-markdown.nvim
+
+Marktext
+Copyright (C) 2017-2024 Marktext Contributors
+Licensed under MIT — https://github.com/marktext/marktext
