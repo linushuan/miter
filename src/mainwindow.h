@@ -6,6 +6,8 @@
 
 class TabManager;
 class EditorWidget;
+class MdEditor;
+class QAction;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -25,12 +27,25 @@ private slots:
     void onNextTab();
     void onPrevTab();
     void onJumpToTab(int index);
+    void onZoomInAll();
+    void onZoomOutAll();
+    void onZoomResetAll();
+    void onToggleTheme();
 
 private:
     TabManager *tabManager_;
     QStatusBar *statusBar_;
+    int currentLine_ = 1;
+    int currentCol_ = 1;
+    int currentWords_ = 0;
+    int currentChars_ = 0;
+    QString currentPath_;
+    MdEditor *statusEditor_ = nullptr;
+    QAction *themeToggleAction_ = nullptr;
 
     void setupShortcuts();
-    void restoreSession();
-    void saveSession();
+    void setupToolbar();
+    void refreshStatusBar();
+    void applyTheme(const QString &themeName);
+    QString toggledThemeName() const;
 };

@@ -1,0 +1,48 @@
+name = "white"
+
+background     = "#ffffff"
+foreground     = "#1f2937"
+currentLineBg  = "#f3f4f6"
+lineNumberFg   = "#9ca3af"
+lineNumberBg   = "#ffffff"
+selectionBg    = "#c7d2fe"
+selectionFg    = "#111827"
+cursorColor    = "#111827"
+searchHighlightBg = "#fde68a88"
+
+[heading]
+h1 = "#b91c1c"
+h2 = "#1d4ed8"
+h3 = "#0f766e"
+h4 = "#166534"
+h5 = "#b45309"
+h6 = "#6b21a8"
+
+[code]
+inlineFg  = "#c2410c"
+inlineBg  = "#ffedd5"
+fenceFg   = "#92400e"
+fenceBg   = "#00000000"
+langFg    = "#166534"
+
+[block]
+blockquoteFg     = "#4b5563"
+blockquoteBorder = "#94a3b8"
+listBullet       = "#2563eb"
+linkText         = "#0f766e"
+linkUrl          = "#1d4ed8"
+image            = "#c2410c"
+bold             = "#111827"
+italic           = "#0f766e"
+strike           = "#9ca3af"
+tablePipe        = "#64748b"
+hr               = "#cbd5e1"
+marker           = "#94a3b8"
+hardBreak        = "#7c3aed"
+
+[latex]
+delimiter  = "#0f766e"
+command    = "#be185d"
+brace      = "#b45309"
+mathBody   = "#7c2d12"
+envName    = "#166534"

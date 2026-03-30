@@ -72,6 +72,7 @@ private slots:
         QCOMPARE(BlockParser::classify("- item", ctx, tokens), BlockType::ListItem);
         QCOMPARE(BlockParser::classify("* item", ctx, tokens), BlockType::ListItem);
         QCOMPARE(BlockParser::classify("+ item", ctx, tokens), BlockType::ListItem);
+        QCOMPARE(BlockParser::classify("    - nested item", ctx, tokens), BlockType::ListItem);
     }
 
     void testOrderedList()
@@ -81,6 +82,7 @@ private slots:
 
         QCOMPARE(BlockParser::classify("1. item", ctx, tokens), BlockType::ListItem);
         QCOMPARE(BlockParser::classify("99) item", ctx, tokens), BlockType::ListItem);
+        QCOMPARE(BlockParser::classify("        2. nested item", ctx, tokens), BlockType::ListItem);
     }
 
     void testHR()
@@ -112,6 +114,15 @@ private slots:
 
         QCOMPARE(BlockParser::classify("E = mc^2", ctx, tokens), BlockType::LatexDisplayBody);
         QCOMPARE(BlockParser::classify("$$", ctx, tokens), BlockType::LatexDisplayEnd);
+    }
+
+    void testSingleLineLatexDisplay()
+    {
+        ContextStack ctx;
+        QVector<BlockToken> tokens;
+
+        QCOMPARE(BlockParser::classify("$$x^2 + y^2$$", ctx, tokens), BlockType::LatexDisplayBody);
+        QVERIFY(!tokens.isEmpty());
     }
 
     void testBlankLine()

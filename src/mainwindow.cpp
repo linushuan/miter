@@ -1,7 +1,7 @@
 #include "mainwindow.h"
 #include "editor/TabManager.h"
 #include "editor/EditorWidget.h"
-#include "editor/SessionManager.h"
+#include "editor/MdEditor.h"
 #include "config/Settings.h"
 
 #include <QCloseEvent>
@@ -16,6 +16,9 @@
 #include <QVBoxLayout>
 #include <QDialogButtonBox>
 #include <QPushButton>
+#include <QToolBar>
+#include <QAction>
+#include <QStyle>
 
 MainWindow::MainWindow(const QStringList &filesToOpen, QWidget *parent)
     : QMainWindow(parent)
@@ -33,7 +36,7 @@ MainWindow::MainWindow(const QStringList &filesToOpen, QWidget *parent)
     // Status bar
     statusBar_ = new QStatusBar(this);
     setStatusBar(statusBar_);
-    statusBar_->showMessage("Ready");
+    refreshStatusBar();
 
     // Connect signals
     connect(tabManager_, &TabManager::currentEditorChanged,
@@ -41,14 +44,13 @@ MainWindow::MainWindow(const QStringList &filesToOpen, QWidget *parent)
 
     // Setup shortcuts
     setupShortcuts();
+    setupToolbar();
 
-    // Restore session or open files from CLI
+    // Open files from CLI only; no automatic session restore.
     if (!filesToOpen.isEmpty()) {
         for (const auto &path : filesToOpen) {
             tabManager_->openFile(path);
         }
-    } else {
-        restoreSession();
     }
 
     // Ensure at least one tab
@@ -115,7 +117,6 @@ void MainWindow::closeEvent(QCloseEvent *event)
         // Discard: just close without saving
     }
 
-    saveSession();
     event->accept();
 }
 
@@ -123,13 +124,38 @@ void MainWindow::onCurrentEditorChanged(EditorWidget *editor)
 {
     if (!editor) return;
 
-    // Update status bar with cursor position, word count, etc.
-    statusBar_->showMessage(
-        QString("Line: %1  Col: %2  |  %3")
-            .arg(editor->cursorLine())
-            .arg(editor->cursorColumn())
-            .arg(editor->filePath().isEmpty() ? "Untitled" : editor->filePath())
-    );
+    auto *md = editor->editor();
+    if (!md) return;
+
+    if (statusEditor_) {
+        disconnect(statusEditor_, nullptr, this, nullptr);
+    }
+    statusEditor_ = md;
+
+    connect(md, &MdEditor::cursorPositionChanged, this,
+            [this](int line, int col) {
+                currentLine_ = line;
+                currentCol_ = col;
+                refreshStatusBar();
+            });
+
+    connect(md, &MdEditor::wordCountChanged, this,
+            [this](int words, int chars) {
+                currentWords_ = words;
+                currentChars_ = chars;
+                refreshStatusBar();
+            });
+
+    connect(md, &MdEditor::fileChanged, this,
+            [this](const QString &path) {
+                currentPath_ = path;
+                refreshStatusBar();
+            });
+
+    currentLine_ = editor->cursorLine();
+    currentCol_ = editor->cursorColumn();
+    currentPath_ = editor->filePath();
+    refreshStatusBar();
 }
 
 void MainWindow::onNewTab()
@@ -167,6 +193,38 @@ void MainWindow::onSaveAs()
 void MainWindow::onCloseTab()
 {
     tabManager_->closeCurrentTab();
+}
+
+void MainWindow::onZoomInAll()
+{
+    tabManager_->zoomAllEditorsIn();
+    Settings s = Settings::load();
+    s.fontSize = tabManager_->globalFontSize();
+    s.save();
+    statusBar_->showMessage(QString("Font size: %1").arg(s.fontSize), 1200);
+}
+
+void MainWindow::onZoomOutAll()
+{
+    tabManager_->zoomAllEditorsOut();
+    Settings s = Settings::load();
+    s.fontSize = tabManager_->globalFontSize();
+    s.save();
+    statusBar_->showMessage(QString("Font size: %1").arg(s.fontSize), 1200);
+}
+
+void MainWindow::onZoomResetAll()
+{
+    tabManager_->zoomAllEditorsReset();
+    Settings s = Settings::load();
+    s.fontSize = tabManager_->globalFontSize();
+    s.save();
+    statusBar_->showMessage(QString("Font size reset: %1").arg(s.fontSize), 1200);
+}
+
+void MainWindow::onToggleTheme()
+{
+    applyTheme(toggledThemeName());
 }
 
 void MainWindow::onNextTab()
@@ -212,22 +270,11 @@ void MainWindow::setupShortcuts()
         connect(sc, &QShortcut::activated, this, [this, i]() { onJumpToTab(i - 1); });
     }
 
-    // Font size
-    auto *zoomIn = new QShortcut(QKeySequence("Ctrl++"), this);
-    connect(zoomIn, &QShortcut::activated, this, [this]() {
-        auto *e = tabManager_->currentEditor();
-        if (e) e->zoomIn();
-    });
-    auto *zoomOut = new QShortcut(QKeySequence("Ctrl+-"), this);
-    connect(zoomOut, &QShortcut::activated, this, [this]() {
-        auto *e = tabManager_->currentEditor();
-        if (e) e->zoomOut();
-    });
-    auto *zoomReset = new QShortcut(QKeySequence("Ctrl+0"), this);
-    connect(zoomReset, &QShortcut::activated, this, [this]() {
-        auto *e = tabManager_->currentEditor();
-        if (e) e->zoomReset();
-    });
+    // Global font size across all tabs.
+    addShortcut(QKeySequence("Ctrl++"),       &MainWindow::onZoomInAll);
+    addShortcut(QKeySequence("Ctrl+="),       &MainWindow::onZoomInAll);
+    addShortcut(QKeySequence("Ctrl+-"),       &MainWindow::onZoomOutAll);
+    addShortcut(QKeySequence("Ctrl+0"),       &MainWindow::onZoomResetAll);
 
     // Focus mode, fullscreen
     auto *focus = new QShortcut(QKeySequence("F11"), this);
@@ -263,40 +310,55 @@ void MainWindow::setupShortcuts()
     });
 }
 
-void MainWindow::restoreSession()
+void MainWindow::setupToolbar()
 {
-    Settings settings = Settings::load();
-    if (!settings.restoreSession) return;
+    auto *tb = addToolBar("Main");
+    tb->setMovable(false);
 
-    auto session = SessionManager::load();
-    for (const auto &path : session.openFiles) {
-        if (QFile::exists(path)) {
-            tabManager_->openFile(path);
-        }
-    }
+    auto *importMd = tb->addAction(style()->standardIcon(QStyle::SP_DialogOpenButton), "Import");
+    connect(importMd, &QAction::triggered, this, &MainWindow::onOpenFile);
 
-    for (int i = 0; i < session.cursorLines.size() && i < tabManager_->count(); ++i) {
-        auto *editor = tabManager_->editorAt(i);
-        if (editor) {
-            editor->setCursorLine(session.cursorLines[i]);
-        }
-    }
+    auto *save = tb->addAction(style()->standardIcon(QStyle::SP_DialogSaveButton), "Save");
+    connect(save, &QAction::triggered, this, &MainWindow::onSave);
 
-    if (session.activeIndex >= 0 && session.activeIndex < tabManager_->count()) {
-        tabManager_->setCurrentIndex(session.activeIndex);
+    tb->addSeparator();
+    themeToggleAction_ = tb->addAction("Theme: Toggle");
+    connect(themeToggleAction_, &QAction::triggered, this, &MainWindow::onToggleTheme);
+    refreshStatusBar();
+}
+
+void MainWindow::refreshStatusBar()
+{
+    const QString theme = tabManager_ ? tabManager_->themeName() : QString("dark");
+    const QString path = currentPath_.isEmpty() ? "Untitled" : currentPath_;
+    statusBar_->showMessage(
+        QString("Ln %1, Col %2 | Words %3, Chars %4 | %5 | Theme: %6")
+            .arg(currentLine_)
+            .arg(currentCol_)
+            .arg(currentWords_)
+            .arg(currentChars_)
+            .arg(path)
+            .arg(theme)
+    );
+
+    if (themeToggleAction_) {
+        const QString nextTheme = (theme == "white") ? "dark" : "white";
+        themeToggleAction_->setText(QString("Theme: %1").arg(nextTheme));
     }
 }
 
-void MainWindow::saveSession()
+void MainWindow::applyTheme(const QString &themeName)
 {
-    SessionManager::Session session;
-    session.openFiles = tabManager_->openFilePaths();
-    session.activeIndex = tabManager_->currentIndex();
-
-    for (int i = 0; i < tabManager_->count(); ++i) {
-        auto *editor = tabManager_->editorAt(i);
-        session.cursorLines.append(editor ? editor->cursorLine() : 0);
-    }
-
-    SessionManager::save(session);
+    tabManager_->setThemeName(themeName);
+    Settings s = Settings::load();
+    s.theme = themeName;
+    s.save();
+    refreshStatusBar();
 }
+
+QString MainWindow::toggledThemeName() const
+{
+    const QString current = tabManager_ ? tabManager_->themeName() : QString("dark");
+    return (current == "white") ? "dark" : "white";
+}
+

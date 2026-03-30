@@ -5,6 +5,7 @@
 
 #include <QTextBlock>
 #include <QTextBlockUserData>
+#include <QRegularExpression>
 
 // Store ContextStack in QTextBlockUserData
 class ContextBlockData : public QTextBlockUserData {
@@ -29,12 +30,32 @@ void MdHighlighter::setTheme(const Theme &theme)
 
 void MdHighlighter::setEnabled(bool enabled)
 {
+    if (enabled_ == enabled)
+        return;
+
     enabled_ = enabled;
+    if (enabled_) {
+        // Ensure blocks changed during IME composition get refreshed.
+        rehighlight();
+    }
+}
+
+void MdHighlighter::setBaseFontSize(int pointSize)
+{
+    const int clamped = qMax(6, pointSize);
+    if (baseFontSize_ == clamped)
+        return;
+
+    baseFontSize_ = clamped;
+    buildFormats();
+    rehighlight();
 }
 
 void MdHighlighter::highlightBlock(const QString &text)
 {
     if (!enabled_) return;
+    const int textLen = static_cast<int>(text.length());
+    static QRegularExpression tableSeparatorRe(R"(^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$)");
 
     // 1. Restore context from previous block
     ContextStack ctx = restoreContext();
@@ -57,18 +78,18 @@ void MdHighlighter::highlightBlock(const QString &text)
     // Override for setext heading
     if (isSetextH1 && blockType == BlockType::Normal) {
         blockTokens.clear();
-        blockTokens.append({0, text.length(), TokenType::HeadingH1});
+        blockTokens.append({0, textLen, TokenType::HeadingH1});
         blockType = BlockType::Heading;
     } else if (isSetextH2 && blockType == BlockType::Normal) {
         blockTokens.clear();
-        blockTokens.append({0, text.length(), TokenType::HeadingH2});
+        blockTokens.append({0, textLen, TokenType::HeadingH2});
         blockType = BlockType::Heading;
     }
     // Mark setext underline itself
     if (BlockParser::isSetextH1Underline(text) || BlockParser::isSetextH2Underline(text)) {
         if (currentBlock().previous().isValid()) {
             blockTokens.clear();
-            blockTokens.append({0, text.length(), TokenType::SetextMarker});
+            blockTokens.append({0, textLen, TokenType::SetextMarker});
         }
     }
 
@@ -76,6 +97,29 @@ void MdHighlighter::highlightBlock(const QString &text)
     for (const auto &token : blockTokens) {
         if (formats_.contains(token.type)) {
             setFormat(token.start, token.length, formats_[token.type]);
+        }
+    }
+
+    if (blockType == BlockType::Table) {
+        const bool isSeparator = tableSeparatorRe.match(text).hasMatch();
+        bool isHeader = false;
+        if (!isSeparator) {
+            QTextBlock next = currentBlock().next();
+            isHeader = next.isValid() && tableSeparatorRe.match(next.text()).hasMatch();
+        }
+
+        if (isSeparator) {
+            setFormat(0, textLen, formats_[TokenType::TableSeparator]);
+        } else if (isHeader) {
+            setFormat(0, textLen, formats_[TokenType::TableHeader]);
+        } else {
+            setFormat(0, textLen, formats_[TokenType::TableCell]);
+        }
+
+        for (const auto &token : blockTokens) {
+            if (token.type == TokenType::TablePipe && formats_.contains(TokenType::TablePipe)) {
+                setFormat(token.start, token.length, formats_[TokenType::TablePipe]);
+            }
         }
     }
 
@@ -109,9 +153,29 @@ void MdHighlighter::highlightBlock(const QString &text)
             // Run full inline parser
             QVector<InlineToken> inlineTokens;
             InlineParser::parse(text, contentOffset, ctx, inlineTokens);
+
+            // Keep heading font-size even when inline syntax (like `code`) applies.
+            double headingScale = 1.0;
+            if (blockType == BlockType::Heading) {
+                for (const auto &token : blockTokens) {
+                    if (token.type == TokenType::HeadingH1) headingScale = 1.5;
+                    else if (token.type == TokenType::HeadingH2) headingScale = 1.3;
+                    else if (token.type == TokenType::HeadingH3) headingScale = 1.15;
+                    else if (token.type == TokenType::HeadingH4) headingScale = 1.05;
+                    else if (token.type == TokenType::HeadingH5) headingScale = 1.0;
+                    else if (token.type == TokenType::HeadingH6) headingScale = 1.0;
+                }
+            }
+
             for (const auto &token : inlineTokens) {
-                if (formats_.contains(token.type))
-                    setFormat(token.start, token.length, formats_[token.type]);
+                if (!formats_.contains(token.type))
+                    continue;
+
+                QTextCharFormat fmt = formats_[token.type];
+                if (blockType == BlockType::Heading) {
+                    fmt.setFontPointSize(baseFontSize_ * headingScale);
+                }
+                setFormat(token.start, token.length, fmt);
             }
         }
     }
@@ -150,7 +214,7 @@ void MdHighlighter::buildFormats()
     };
 
     // Headings — with font size scaling
-    int baseSize = 14;
+    const int baseSize = baseFontSize_;
     auto headingFmt = [&](const QColor &color, double scale) {
         QTextCharFormat fmt;
         fmt.setForeground(color);
@@ -168,13 +232,23 @@ void MdHighlighter::buildFormats()
     h6.setFontItalic(true);
     formats_[TokenType::HeadingH6] = h6;
 
+    auto withHeadingBg = [](QTextCharFormat fmt) {
+        QColor bg = fmt.foreground().color();
+        bg.setAlpha(44);
+        fmt.setBackground(bg);
+        return fmt;
+    };
+    formats_[TokenType::HeadingH1] = withHeadingBg(formats_[TokenType::HeadingH1]);
+    formats_[TokenType::HeadingH2] = withHeadingBg(formats_[TokenType::HeadingH2]);
+    formats_[TokenType::HeadingH3] = withHeadingBg(formats_[TokenType::HeadingH3]);
+
     formats_[TokenType::HeadingMarker] = makeFormat(theme_.markerFg);
     formats_[TokenType::SetextMarker]  = makeFormat(theme_.markerFg);
 
     // Code
     formats_[TokenType::CodeFenceMark] = makeFormat(theme_.codeFenceFg);
     formats_[TokenType::CodeFenceLang] = makeFormat(theme_.codeFenceLangFg);
-    formats_[TokenType::CodeFenceBody] = makeFormat(theme_.codeFenceFg, false, false, theme_.codeFenceBg);
+    formats_[TokenType::CodeFenceBody] = makeFormat(theme_.codeFenceFg);
     formats_[TokenType::InlineCode]    = makeFormat(theme_.codeInlineFg, false, false, theme_.codeInlineBg);
     formats_[TokenType::InlineCodeMark] = makeFormat(theme_.markerFg);
 
@@ -187,10 +261,21 @@ void MdHighlighter::buildFormats()
     formats_[TokenType::ListBody]   = makeFormat(theme_.foreground);
 
     // Table
-    formats_[TokenType::TablePipe]      = makeFormat(theme_.tablePipeFg);
-    formats_[TokenType::TableHeader]    = makeFormat(theme_.foreground, true);
-    formats_[TokenType::TableSeparator] = makeFormat(theme_.tablePipeFg);
-    formats_[TokenType::TableCell]      = makeFormat(theme_.foreground);
+    QTextCharFormat tableHeader = makeFormat(theme_.foreground, true);
+    QColor tableHeaderBg = theme_.selectionBg;
+    tableHeaderBg.setAlpha(56);
+    tableHeader.setBackground(tableHeaderBg);
+    QTextCharFormat tableCell = makeFormat(theme_.foreground);
+    QColor tableCellBg = theme_.lineNumberBg;
+    tableCellBg.setAlpha(28);
+    tableCell.setBackground(tableCellBg);
+    QTextCharFormat tableSep = makeFormat(theme_.tablePipeFg);
+    tableSep.setFontWeight(QFont::Bold);
+
+    formats_[TokenType::TablePipe]      = makeFormat(theme_.tablePipeFg, true);
+    formats_[TokenType::TableHeader]    = tableHeader;
+    formats_[TokenType::TableSeparator] = tableSep;
+    formats_[TokenType::TableCell]      = tableCell;
 
     // HR
     formats_[TokenType::HR] = makeFormat(theme_.hrFg);
@@ -207,10 +292,10 @@ void MdHighlighter::buildFormats()
 
     formats_[TokenType::LinkText]    = makeFormat(theme_.linkTextFg);
     formats_[TokenType::LinkUrl]     = makeFormat(theme_.linkUrlFg);
-    formats_[TokenType::LinkBracket] = makeFormat(theme_.markerFg);
+    formats_[TokenType::LinkBracket] = makeFormat(theme_.linkTextFg, true);
     formats_[TokenType::ImageAlt]    = makeFormat(theme_.imageFg);
     formats_[TokenType::ImageUrl]    = makeFormat(theme_.linkUrlFg);
-    formats_[TokenType::ImageBracket] = makeFormat(theme_.markerFg);
+    formats_[TokenType::ImageBracket] = makeFormat(theme_.imageFg, true);
 
     formats_[TokenType::HardBreakSpace]     = makeFormat(theme_.hardBreakFg);
     formats_[TokenType::HardBreakBackslash] = makeFormat(theme_.hardBreakFg);

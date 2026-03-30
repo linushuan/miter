@@ -55,3 +55,4 @@ endif()
 # Install
 install(TARGETS mded RUNTIME DESTINATION bin)
 install(DIRECTORY themes DESTINATION share/mded)
+install(FILES mded.desktop DESTINATION share/applications)

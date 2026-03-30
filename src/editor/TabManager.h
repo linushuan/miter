@@ -6,6 +6,7 @@
 #include <QFileSystemWatcher>
 #include <QToolButton>
 #include <QStringList>
+#include <QSet>
 
 class EditorWidget;
 
@@ -31,6 +32,13 @@ public:
     bool        hasUnsavedChanges() const;
     QStringList openFilePaths() const;
 
+    void zoomAllEditorsIn();
+    void zoomAllEditorsOut();
+    void zoomAllEditorsReset();
+    int  globalFontSize() const;
+    void setThemeName(const QString &themeName);
+    QString themeName() const;
+
 signals:
     void currentEditorChanged(EditorWidget *editor);
     void tabCountChanged(int count);
@@ -40,12 +48,18 @@ private slots:
     void onEditorModifiedChanged(bool modified);
     void onCurrentChanged(int index);
     void onFileWatcherTriggered(const QString &path);
+    void onEditorFileSaved(const QString &path);
 
 private:
     QTabBar            *tabBar_;
     QStackedWidget     *stack_;
     QFileSystemWatcher *watcher_;
     QToolButton        *addTabBtn_;
+    int                 globalFontSize_ = 14;
+    int                 defaultFontSize_ = 14;
+    QString             themeName_ = "dark";
+    QSet<QString>       pendingInternalWrite_;
+    QSet<QString>       externallyModifiedPaths_;
 
     void updateTabTitle(int index);
     bool confirmClose(EditorWidget *editor);

@@ -24,6 +24,8 @@ EditorWidget::EditorWidget(QWidget *parent)
     // Forward modified signal
     connect(editor_, &MdEditor::modifiedChanged,
             this, &EditorWidget::modifiedChanged);
+    connect(editor_, &MdEditor::fileSaved,
+            this, &EditorWidget::fileSaved);
 }
 
 MdEditor *EditorWidget::editor() const
@@ -82,25 +84,17 @@ void EditorWidget::setCursorLine(int line)
 
 void EditorWidget::zoomIn()
 {
-    QFont f = editor_->font();
-    f.setPointSize(f.pointSize() + 1);
-    editor_->setFont(f);
+    editor_->setGlobalFontPointSize(editor_->globalFontPointSize() + 1);
 }
 
 void EditorWidget::zoomOut()
 {
-    QFont f = editor_->font();
-    if (f.pointSize() > 6) {
-        f.setPointSize(f.pointSize() - 1);
-        editor_->setFont(f);
-    }
+    editor_->setGlobalFontPointSize(editor_->globalFontPointSize() - 1);
 }
 
 void EditorWidget::zoomReset()
 {
-    QFont f = editor_->font();
-    f.setPointSize(baseFontSize_);
-    editor_->setFont(f);
+    editor_->setGlobalFontPointSize(editor_->defaultFontPointSize());
 }
 
 void EditorWidget::toggleFocusMode()

@@ -4,26 +4,27 @@
 BlockType BlockParser::classify(const QString &text, ContextStack &ctx, QVector<BlockToken> &tokens)
 {
     tokens.clear();
+    const int textLen = static_cast<int>(text.length());
 
     // 1. Continue CodeFence
     if (ctx.inCode()) {
         if (matchCodeFenceEnd(text, ctx.top().fenceChar, ctx.top().fenceLen)) {
-            tokens.append({0, text.length(), TokenType::CodeFenceMark});
+            tokens.append({0, textLen, TokenType::CodeFenceMark});
             ctx.pop();
             return BlockType::CodeFenceEnd;
         }
-        tokens.append({0, text.length(), TokenType::CodeFenceBody});
+        tokens.append({0, textLen, TokenType::CodeFenceBody});
         return BlockType::CodeFenceBody;
     }
 
     // 2. Continue LatexDisplay
     if (ctx.topState() == BlockState::LatexDisplay) {
         if (text.trimmed() == "$$") {
-            tokens.append({0, text.length(), TokenType::LatexDelimiter});
+            tokens.append({0, textLen, TokenType::LatexDelimiter});
             ctx.pop();
             return BlockType::LatexDisplayEnd;
         }
-        tokens.append({0, text.length(), TokenType::LatexMathBody});
+        tokens.append({0, textLen, TokenType::LatexMathBody});
         return BlockType::LatexDisplayBody;
     }
 
@@ -31,11 +32,11 @@ BlockType BlockParser::classify(const QString &text, ContextStack &ctx, QVector<
     if (ctx.topState() == BlockState::LatexEnv) {
         QString endPattern = "\\end{" + ctx.top().envName + "}";
         if (text.contains(endPattern)) {
-            tokens.append({0, text.length(), TokenType::LatexBeginEnd});
+            tokens.append({0, textLen, TokenType::LatexBeginEnd});
             ctx.pop();
             return BlockType::LatexEnvEnd;
         }
-        tokens.append({0, text.length(), TokenType::LatexMathBody});
+        tokens.append({0, textLen, TokenType::LatexMathBody});
         return BlockType::LatexEnvBody;
     }
 
@@ -56,11 +57,11 @@ BlockType BlockParser::classify(const QString &text, ContextStack &ctx, QVector<
     int fenceLen, indent;
     QString lang;
     if (matchCodeFenceStart(text, fenceChar, fenceLen, indent, lang)) {
-        tokens.append({0, text.length(), TokenType::CodeFenceMark});
+        tokens.append({0, textLen, TokenType::CodeFenceMark});
         if (!lang.isEmpty()) {
             // Find lang position and mark it
             int langStart = text.indexOf(lang);
-            tokens.append({langStart, lang.length(), TokenType::CodeFenceLang});
+            tokens.append({langStart, static_cast<int>(lang.length()), TokenType::CodeFenceLang});
         }
         ContextFrame frame;
         frame.state = BlockState::CodeFence;
@@ -71,8 +72,24 @@ BlockType BlockParser::classify(const QString &text, ContextStack &ctx, QVector<
     }
 
     // 6. $$ display LaTeX start
+    static QRegularExpression singleLineDisplayRe(R"(\$\$\s*(.+?)\s*\$\$)");
+    auto displayMatch = singleLineDisplayRe.match(text);
+    if (displayMatch.hasMatch()) {
+        const int start = displayMatch.capturedStart(0);
+        const int end = displayMatch.capturedEnd(0);
+        const int innerStart = displayMatch.capturedStart(1);
+        const int innerEnd = displayMatch.capturedEnd(1);
+
+        tokens.append({start, 2, TokenType::LatexDelimiter});
+        if (innerEnd > innerStart) {
+            tokens.append({innerStart, innerEnd - innerStart, TokenType::LatexMathBody});
+        }
+        tokens.append({end - 2, 2, TokenType::LatexDelimiter});
+        return BlockType::LatexDisplayBody;
+    }
+
     if (text.trimmed() == "$$") {
-        tokens.append({0, text.length(), TokenType::LatexDelimiter});
+        tokens.append({0, textLen, TokenType::LatexDelimiter});
         ContextFrame frame;
         frame.state = BlockState::LatexDisplay;
         ctx.push(frame);
@@ -83,7 +100,7 @@ BlockType BlockParser::classify(const QString &text, ContextStack &ctx, QVector<
     static QRegularExpression beginRe(R"(\\begin\{(\w+)\})");
     auto beginMatch = beginRe.match(text);
     if (beginMatch.hasMatch()) {
-        tokens.append({0, text.length(), TokenType::LatexBeginEnd});
+        tokens.append({0, textLen, TokenType::LatexBeginEnd});
         ContextFrame frame;
         frame.state = BlockState::LatexEnv;
         frame.envName = beginMatch.captured(1);
@@ -106,7 +123,7 @@ BlockType BlockParser::classify(const QString &text, ContextStack &ctx, QVector<
     int contentOffset;
     if (matchBlockquote(text, contentOffset)) {
         tokens.append({0, contentOffset, TokenType::BlockquoteMark});
-        tokens.append({contentOffset, text.length() - contentOffset, TokenType::BlockquoteBody});
+        tokens.append({contentOffset, textLen - contentOffset, TokenType::BlockquoteBody});
         return BlockType::Blockquote;
     }
 
@@ -114,20 +131,20 @@ BlockType BlockParser::classify(const QString &text, ContextStack &ctx, QVector<
     int listIndent;
     if (matchOrderedList(text, listIndent, contentOffset)) {
         tokens.append({0, contentOffset, TokenType::ListBullet});
-        tokens.append({contentOffset, text.length() - contentOffset, TokenType::ListBody});
+        tokens.append({contentOffset, textLen - contentOffset, TokenType::ListBody});
         return BlockType::ListItem;
     }
 
     // 11. Unordered list
     if (matchUnorderedList(text, listIndent, contentOffset)) {
         tokens.append({0, contentOffset, TokenType::ListBullet});
-        tokens.append({contentOffset, text.length() - contentOffset, TokenType::ListBody});
+        tokens.append({contentOffset, textLen - contentOffset, TokenType::ListBody});
         return BlockType::ListItem;
     }
 
     // 12. Horizontal rule
     if (matchHR(text)) {
-        tokens.append({0, text.length(), TokenType::HR});
+        tokens.append({0, textLen, TokenType::HR});
         return BlockType::HR;
     }
 
@@ -212,7 +229,7 @@ bool BlockParser::matchBlockquote(const QString &text, int &contentOffset)
 
 bool BlockParser::matchOrderedList(const QString &text, int &indent, int &contentOffset)
 {
-    static QRegularExpression re(R"(^( {0,3})(\d{1,9})[.)](\s|$))");
+    static QRegularExpression re(R"(^(\s*)(\d{1,9})[.)](\s|$))");
     auto m = re.match(text);
     if (!m.hasMatch()) return false;
     indent = m.captured(1).length();
@@ -222,7 +239,7 @@ bool BlockParser::matchOrderedList(const QString &text, int &indent, int &conten
 
 bool BlockParser::matchUnorderedList(const QString &text, int &indent, int &contentOffset)
 {
-    static QRegularExpression re(R"(^( {0,3})([-*+])(\s|$))");
+    static QRegularExpression re(R"(^(\s*)([-*+])(\s|$))");
     auto m = re.match(text);
     if (!m.hasMatch()) return false;
 

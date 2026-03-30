@@ -1,6 +1,7 @@
 # Build artifacts
 /build/
 /build-*/
+cmake-build-*/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
@@ -20,6 +21,7 @@ ui_*.h
 # Binaries and libraries
 *.o
 *.obj
+*.d
 *.a
 *.so
 *.so.*
@@ -27,6 +29,7 @@ ui_*.h
 *.dll
 *.exe
 mded
+*.out
 
 # Test output
 *.gcda
@@ -45,4 +48,7 @@ mded
 Thumbs.db
 
 # docs
-spec.md
+# Local install/test artifacts
+.cache/
+dist/
+tmp/

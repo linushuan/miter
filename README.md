@@ -1,35 +1,60 @@
-# mded — Minimal Markdown Editor
+# mded
 
-A minimal Markdown + LaTeX syntax highlighting editor for Linux, built with Qt6/C++17.
+mded is a lightweight Markdown editor for Linux.
+It focuses on fast typing, syntax highlighting, and clean reading while editing.
 
-## Features
+## What You Can Do
 
-- **Pure text editing** — syntax highlighted via colors and font sizes, no rendering
-- **Multi-tab** — open multiple `.md` files with independent undo stacks
-- **Mouse-friendly** — click, select, scroll, all work as expected
-- **Low latency** — incremental highlighting via Qt's `QSyntaxHighlighter`
-- **LaTeX support** — inline `$...$`, display `$$...$$`, and `\begin{env}` highlighting
-- **CJK support** — proper Chinese/Japanese/Korean boundary handling for bold/italic
-- **Catppuccin themes** — dark and light themes built-in, customizable via TOML
+- Edit Markdown with multi-tab workflow.
+- Highlight Markdown, code fences, tables, links/images, and LaTeX.
+- Use dark/white theme toggle from the toolbar.
+- Auto-continue list items on Enter (bullets, numbers, checkboxes).
+- Save files with standard keyboard shortcuts.
 
-## Build
+## Quick Start
 
-```bash
-mkdir build && cd build
-cmake .. -DCMAKE_PREFIX_PATH=/path/to/qt6
-make -j$(nproc)
-```
-
-## Run
+Build and run from source:
 
 ```bash
-./mded                    # Open with empty tab
-./mded file1.md file2.md  # Open multiple files
+mkdir -p build
+cd build
+cmake ..
+cmake --build . -j$(nproc)
+./mded
 ```
 
-## Configuration
+Open files directly:
 
-Settings are stored in `~/.config/mded/config.toml`. See `spec.md` for all options.
+```bash
+./mded notes.md todo.md
+```
+
+## Shortcuts
+
+- `Ctrl+O`: Import/Open file
+- `Ctrl+S`: Save
+- `Ctrl+Shift+S`: Save As
+- `Ctrl+T`: New tab
+- `Ctrl+W`: Close tab
+- `Ctrl+Tab`: Next tab
+- `Ctrl+Shift+Tab`: Previous tab
+- `Ctrl+F`: Search
+- `Ctrl++` / `Ctrl+-` / `Ctrl+0`: Font zoom in/out/reset
+- `Ctrl+L`: Toggle line numbers
+- `Ctrl+Shift+W`: Toggle word wrap
+- `F11`: Focus mode
+- `F12`: Fullscreen
+
+## Themes
+
+- Use the toolbar button `Theme: ...` to switch between dark and white.
+- Theme files are stored in [themes](themes).
+
+## Config File
+
+User settings are saved at:
+
+`~/.config/mded/config.toml`
 
 ## License
 

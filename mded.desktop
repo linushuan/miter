@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=mded
+Comment=Minimal Markdown Editor
+Exec=mded %F
+Icon=mded
+Terminal=false
+Categories=Utility;TextEditor;
+MimeType=text/markdown;text/plain;
+StartupNotify=true

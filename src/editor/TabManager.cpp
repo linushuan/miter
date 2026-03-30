@@ -1,6 +1,7 @@
 #include "TabManager.h"
 #include "EditorWidget.h"
 #include "MdEditor.h"
+#include "config/Settings.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -10,6 +11,11 @@
 TabManager::TabManager(QWidget *parent)
     : QWidget(parent)
 {
+    const Settings settings = Settings::load();
+    defaultFontSize_ = qMax(6, settings.fontSize);
+    globalFontSize_ = defaultFontSize_;
+    themeName_ = settings.theme;
+
     auto *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
@@ -52,12 +58,16 @@ TabManager::TabManager(QWidget *parent)
 int TabManager::addEmptyTab()
 {
     auto *editor = new EditorWidget(this);
+    editor->editor()->setThemeName(themeName_);
+    editor->editor()->setGlobalFontPointSize(globalFontSize_);
     int index = stack_->addWidget(editor);
     tabBar_->addTab("Untitled");
 
     // Connect modified signal
     connect(editor, &EditorWidget::modifiedChanged,
             this, &TabManager::onEditorModifiedChanged);
+    connect(editor, &EditorWidget::fileSaved,
+            this, &TabManager::onEditorFileSaved);
 
     tabBar_->setCurrentIndex(index);
     emit tabCountChanged(count());
@@ -66,6 +76,8 @@ int TabManager::addEmptyTab()
 
 int TabManager::openFile(const QString &path)
 {
+    externallyModifiedPaths_.remove(path);
+
     // Check if already open
     int existing = findTabByPath(path);
     if (existing >= 0) {
@@ -81,12 +93,16 @@ int TabManager::openFile(const QString &path)
         index = currentIndex();
     } else {
         auto *editor = new EditorWidget(this);
+        editor->editor()->setThemeName(themeName_);
+        editor->editor()->setGlobalFontPointSize(globalFontSize_);
         editor->loadFile(path);
         index = stack_->addWidget(editor);
         tabBar_->addTab("");
 
         connect(editor, &EditorWidget::modifiedChanged,
                 this, &TabManager::onEditorModifiedChanged);
+        connect(editor, &EditorWidget::fileSaved,
+                this, &TabManager::onEditorFileSaved);
     }
 
     updateTabTitle(index);
@@ -113,6 +129,8 @@ void TabManager::closeTab(int index)
     QString path = editor ? editor->filePath() : QString();
     if (!path.isEmpty()) {
         watcher_->removePath(path);
+        pendingInternalWrite_.remove(path);
+        externallyModifiedPaths_.remove(path);
     }
 
     // Remove from stack and tab bar
@@ -211,15 +229,41 @@ void TabManager::onCurrentChanged(int index)
 
 void TabManager::onFileWatcherTriggered(const QString &path)
 {
+    if (pendingInternalWrite_.contains(path)) {
+        pendingInternalWrite_.remove(path);
+        if (QFileInfo::exists(path)) {
+            watcher_->addPath(path);
+        }
+        return;
+    }
+
     int index = findTabByPath(path);
     if (index < 0) return;
 
-    // Mark tab as externally modified
-    tabBar_->setTabText(index, tabBar_->tabText(index) + " [已在外部修改]");
+    externallyModifiedPaths_.insert(path);
+    updateTabTitle(index);
 
     // Re-add to watcher (Qt removes it after trigger)
     if (QFileInfo::exists(path)) {
         watcher_->addPath(path);
+    }
+}
+
+void TabManager::onEditorFileSaved(const QString &path)
+{
+    if (path.isEmpty())
+        return;
+
+    pendingInternalWrite_.insert(path);
+    externallyModifiedPaths_.remove(path);
+
+    if (!watcher_->files().contains(path) && QFileInfo::exists(path)) {
+        watcher_->addPath(path);
+    }
+
+    const int index = findTabByPath(path);
+    if (index >= 0) {
+        updateTabTitle(index);
     }
 }
 
@@ -235,6 +279,9 @@ void TabManager::updateTabTitle(int index)
 
     if (editor->isModified())
         title = "● " + title;
+
+    if (externallyModifiedPaths_.contains(path))
+        title += " [已在外部修改]";
 
     tabBar_->setTabText(index, title);
     tabBar_->setTabToolTip(index, path);
@@ -269,4 +316,57 @@ int TabManager::findTabByPath(const QString &path)
             return i;
     }
     return -1;
+}
+
+void TabManager::zoomAllEditorsIn()
+{
+    ++globalFontSize_;
+    for (int i = 0; i < count(); ++i) {
+        if (auto *editor = editorAt(i)) {
+            editor->editor()->setGlobalFontPointSize(globalFontSize_);
+        }
+    }
+}
+
+void TabManager::zoomAllEditorsOut()
+{
+    if (globalFontSize_ <= 6)
+        return;
+
+    --globalFontSize_;
+    for (int i = 0; i < count(); ++i) {
+        if (auto *editor = editorAt(i)) {
+            editor->editor()->setGlobalFontPointSize(globalFontSize_);
+        }
+    }
+}
+
+void TabManager::zoomAllEditorsReset()
+{
+    globalFontSize_ = defaultFontSize_;
+    for (int i = 0; i < count(); ++i) {
+        if (auto *editor = editorAt(i)) {
+            editor->editor()->setGlobalFontPointSize(globalFontSize_);
+        }
+    }
+}
+
+int TabManager::globalFontSize() const
+{
+    return globalFontSize_;
+}
+
+void TabManager::setThemeName(const QString &themeName)
+{
+    themeName_ = themeName;
+    for (int i = 0; i < count(); ++i) {
+        if (auto *editor = editorAt(i)) {
+            editor->editor()->setThemeName(themeName_);
+        }
+    }
+}
+
+QString TabManager::themeName() const
+{
+    return themeName_;
 }

@@ -33,10 +33,10 @@ public:
 
 signals:
     void modifiedChanged(bool modified);
+    void fileSaved(const QString &path);
 
 private:
     MdEditor  *editor_;
     SearchBar *searchBar_;
     bool       focusMode_ = false;
-    int        baseFontSize_ = 14;
 };

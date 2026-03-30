@@ -14,6 +14,7 @@ public:
     explicit MdHighlighter(QTextDocument *parent, const Theme &theme);
     void setTheme(const Theme &theme);
     void setEnabled(bool enabled);
+    void setBaseFontSize(int pointSize);
 
 protected:
     void highlightBlock(const QString &text) override;
@@ -35,4 +36,5 @@ private:
     Theme theme_;
     QHash<TokenType, QTextCharFormat> formats_;
     bool enabled_ = true;
+    int baseFontSize_ = 14;
 };
