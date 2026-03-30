@@ -48,6 +48,8 @@ mded
 Thumbs.db
 
 # docs
+spec.md
+
 # Local install/test artifacts
 .cache/
 dist/
