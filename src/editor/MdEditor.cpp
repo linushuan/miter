@@ -54,7 +54,8 @@ bool matchOrderedListLine(const QString &line,
                           QString *checkbox = nullptr,
                           QString *content = nullptr,
                           int *numberStart = nullptr,
-                          int *numberLength = nullptr)
+                          int *numberLength = nullptr,
+                          int *contentStart = nullptr)
 {
     static const QRegularExpression re(
         R"(^(\s*)(\d+)([.)])(\s+)(\[[ xX]\]\s+)?(.*)$)");
@@ -71,6 +72,7 @@ bool matchOrderedListLine(const QString &line,
     if (content) *content = m.captured(6);
     if (numberStart) *numberStart = m.capturedStart(2);
     if (numberLength) *numberLength = m.capturedLength(2);
+    if (contentStart) *contentStart = m.capturedStart(6);
     return true;
 }
 
@@ -78,7 +80,8 @@ bool matchUnorderedListLine(const QString &line,
                             int *indent = nullptr,
                             QString *marker = nullptr,
                             QString *checkbox = nullptr,
-                            QString *content = nullptr)
+                            QString *content = nullptr,
+                            int *contentStart = nullptr)
 {
     static const QRegularExpression re(
         R"(^(\s*)([-*+])(\s+)(\[[ xX]\]\s+)?(.*)$)");
@@ -92,6 +95,7 @@ bool matchUnorderedListLine(const QString &line,
     if (marker) *marker = m.captured(2);
     if (checkbox) *checkbox = m.captured(4);
     if (content) *content = m.captured(5);
+    if (contentStart) *contentStart = m.capturedStart(5);
     return true;
 }
 
@@ -152,6 +156,34 @@ bool rangeContainsListLine(const QTextBlock &start, const QTextBlock &end)
         }
     }
     return false;
+}
+
+bool hasSameTypeListContextBefore(const QTextBlock &block, bool ordered, int indent)
+{
+    QTextBlock prev = block.previous();
+    while (prev.isValid() && prev.text().trimmed().isEmpty()) {
+        prev = prev.previous();
+    }
+
+    if (!prev.isValid()) {
+        return false;
+    }
+
+    int prevIndent = 0;
+    if (ordered) {
+        int prevNumber = 0;
+        QString prevDelimiter;
+        if (!matchOrderedListLine(prev.text(), &prevIndent, &prevNumber, &prevDelimiter)) {
+            return false;
+        }
+    } else {
+        QString prevMarker;
+        if (!matchUnorderedListLine(prev.text(), &prevIndent, &prevMarker)) {
+            return false;
+        }
+    }
+
+    return prevIndent == indent;
 }
 }
 
@@ -330,34 +362,95 @@ void MdEditor::keyPressEvent(QKeyEvent *event)
 
     // Auto-indent on Enter
     if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
-        QString currentLine = textCursor().block().text();
+        const bool shiftEnter = event->modifiers().testFlag(Qt::ShiftModifier);
+        QTextCursor cursor = textCursor();
+        QString currentLine = cursor.block().text();
         int orderedIndent = 0;
         int orderedNumber = 0;
         QString orderedDelimiter;
         QString orderedCheckbox;
         QString orderedContent;
+        int orderedContentStart = 0;
         const bool ordered = matchOrderedListLine(
             currentLine,
             &orderedIndent,
             &orderedNumber,
             &orderedDelimiter,
             &orderedCheckbox,
-            &orderedContent
+            &orderedContent,
+            nullptr,
+            nullptr,
+            &orderedContentStart
         );
 
         int unorderedIndent = 0;
         QString unorderedMarker;
         QString unorderedCheckbox;
         QString unorderedContent;
+        int unorderedContentStart = 0;
         const bool unordered = !ordered && matchUnorderedListLine(
             currentLine,
             &unorderedIndent,
             &unorderedMarker,
             &unorderedCheckbox,
-            &unorderedContent
+            &unorderedContent,
+            &unorderedContentStart
         );
 
         const int paragraphIndent = leadingSpaceCount(currentLine);
+        const bool emptyListItem = (ordered && orderedContent.trimmed().isEmpty())
+            || (unordered && unorderedContent.trimmed().isEmpty());
+
+        auto clearCurrentEmptyListMarker = [&]() {
+            if (!emptyListItem) {
+                return false;
+            }
+
+            int startInBlock = 0;
+            int endInBlock = 0;
+            if (ordered) {
+                startInBlock = orderedIndent;
+                endInBlock = orderedContentStart;
+            } else if (unordered) {
+                startInBlock = unorderedIndent;
+                endInBlock = unorderedContentStart;
+            } else {
+                return false;
+            }
+
+            const int blockStart = cursor.block().position();
+            QTextCursor editCursor = cursor;
+            editCursor.setPosition(blockStart + startInBlock);
+            editCursor.setPosition(blockStart + endInBlock, QTextCursor::KeepAnchor);
+            editCursor.removeSelectedText();
+            editCursor.clearSelection();
+            editCursor.setPosition(blockStart + startInBlock);
+            setTextCursor(editCursor);
+            return true;
+        };
+
+        if (shiftEnter) {
+            if (clearCurrentEmptyListMarker()) {
+                if (ordered) {
+                    renumberOrderedLists();
+                }
+                return;
+            }
+            QPlainTextEdit::keyPressEvent(event);
+            return;
+        }
+
+        const bool shouldExitByEnter = emptyListItem && (
+            (ordered && hasSameTypeListContextBefore(cursor.block(), true, orderedIndent))
+            || (unordered && hasSameTypeListContextBefore(cursor.block(), false, unorderedIndent))
+        );
+
+        if (shouldExitByEnter && clearCurrentEmptyListMarker()) {
+            if (ordered) {
+                renumberOrderedLists();
+            }
+            return;
+        }
 
         QPlainTextEdit::keyPressEvent(event);
 
