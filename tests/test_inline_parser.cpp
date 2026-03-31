@@ -47,6 +47,23 @@ private slots:
         QCOMPARE(tokens[2].type, TokenType::InlineCodeMark);
     }
 
+    void testInlineCodeContainingDoubleDollar()
+    {
+        ContextStack ctx;
+        QVector<InlineToken> tokens;
+        InlineParser::parse("``$$x^2$$``", 0, ctx, tokens);
+
+        QVERIFY(tokens.size() >= 3);
+        QCOMPARE(tokens[0].type, TokenType::InlineCodeMark);
+        QCOMPARE(tokens[1].type, TokenType::InlineCode);
+        QCOMPARE(tokens[2].type, TokenType::InlineCodeMark);
+
+        for (const auto &t : tokens) {
+            QVERIFY(t.type != TokenType::LatexDelimiter);
+            QVERIFY(t.type != TokenType::LatexMathBody);
+        }
+    }
+
     void testLink()
     {
         ContextStack ctx;

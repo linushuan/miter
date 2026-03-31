@@ -140,6 +140,14 @@ private slots:
         QVERIFY(!tokens.isEmpty());
     }
 
+    void testSingleLineLatexDisplayNotTriggeredInsideInlineCode()
+    {
+        ContextStack ctx;
+        QVector<BlockToken> tokens;
+
+        QCOMPARE(BlockParser::classify("``$$x^2$$``", ctx, tokens), BlockType::Normal);
+    }
+
     void testLatexDisplayInBlockquote()
     {
         ContextStack ctx;
@@ -166,6 +174,48 @@ private slots:
         QCOMPARE(BlockParser::classify("  E = mc^2", ctx, tokens), BlockType::LatexDisplayBody);
         QCOMPARE(BlockParser::classify("  $$", ctx, tokens), BlockType::LatexDisplayEnd);
         QVERIFY(!ctx.inLatex());
+    }
+
+    void testLatexEnvStartsAtLineStartOnly()
+    {
+        ContextStack ctx;
+        QVector<BlockToken> tokens;
+
+        QCOMPARE(BlockParser::classify("\\begin{equation}", ctx, tokens), BlockType::LatexEnvStart);
+        QVERIFY(ctx.inLatex());
+        QCOMPARE(ctx.topState(), BlockState::LatexEnv);
+    }
+
+    void testLatexEnvInlineMentionDoesNotStartBlock()
+    {
+        ContextStack ctx;
+        QVector<BlockToken> tokens;
+
+        QCOMPARE(BlockParser::classify("目標：`\\begin{env}` 有顏色。", ctx, tokens), BlockType::Normal);
+        QVERIFY(!ctx.inLatex());
+    }
+
+    void testInlineBeginMentionDoesNotBreakFenceAndHeading()
+    {
+        ContextStack ctx;
+        QVector<BlockToken> tokens;
+
+        QCOMPARE(
+            BlockParser::classify("目標：`$...$`、`$$...$$`、`\\cmd`、`\\begin{env}` 有顏色。", ctx, tokens),
+            BlockType::Normal
+        );
+        QVERIFY(!ctx.inLatex());
+
+        QCOMPARE(BlockParser::classify("```", ctx, tokens), BlockType::CodeFenceStart);
+        QVERIFY(ctx.inCode());
+
+        QCOMPARE(BlockParser::classify("[x] nested brace {} 計數", ctx, tokens), BlockType::CodeFenceBody);
+        QVERIFY(ctx.inCode());
+
+        QCOMPARE(BlockParser::classify("```", ctx, tokens), BlockType::CodeFenceEnd);
+        QVERIFY(!ctx.inCode());
+
+        QCOMPARE(BlockParser::classify("### Milestone 5：搜尋與 UX 完善（1–2 天）", ctx, tokens), BlockType::Heading);
     }
 
     void testCodeFenceInBlockquote()

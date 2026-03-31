@@ -160,21 +160,23 @@ BlockType BlockParser::classify(const QString &text, ContextStack &ctx, QVector<
     }
 
     // 6. $$ display LaTeX start
-    static QRegularExpression singleLineDisplayRe(R"(\$\$\s*(.+?)\s*\$\$)");
+    static QRegularExpression singleLineDisplayRe(R"(^\s*(\$\$)\s*(.+?)\s*(\$\$)\s*$)");
     auto displayMatch = singleLineDisplayRe.match(content);
     if (displayMatch.hasMatch()) {
-        const int start = displayMatch.capturedStart(0);
-        const int end = displayMatch.capturedEnd(0);
-        const int innerStart = displayMatch.capturedStart(1);
-        const int innerEnd = displayMatch.capturedEnd(1);
+        const int openStart = displayMatch.capturedStart(1);
+        const int openLen = displayMatch.capturedLength(1);
+        const int innerStart = displayMatch.capturedStart(2);
+        const int innerEnd = displayMatch.capturedEnd(2);
+        const int closeStart = displayMatch.capturedStart(3);
+        const int closeLen = displayMatch.capturedLength(3);
 
         appendContainerMarkers(prefix);
 
-        tokens.append({contentOffset + start, 2, TokenType::LatexDelimiter});
+        tokens.append({contentOffset + openStart, openLen, TokenType::LatexDelimiter});
         if (innerEnd > innerStart) {
             tokens.append({contentOffset + innerStart, innerEnd - innerStart, TokenType::LatexMathBody});
         }
-        tokens.append({contentOffset + end - 2, 2, TokenType::LatexDelimiter});
+        tokens.append({contentOffset + closeStart, closeLen, TokenType::LatexDelimiter});
         return BlockType::LatexDisplayBody;
     }
 
@@ -190,7 +192,7 @@ BlockType BlockParser::classify(const QString &text, ContextStack &ctx, QVector<
     }
 
     // 7. \begin{env} LaTeX env start
-    static QRegularExpression beginRe(R"(\\begin\{(\w+)\})");
+    static QRegularExpression beginRe(R"(^\s*\\begin\{(\w+)\})");
     auto beginMatch = beginRe.match(content);
     if (beginMatch.hasMatch()) {
         appendContainerMarkers(prefix);
