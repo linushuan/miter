@@ -318,7 +318,11 @@ void MdHighlighter::buildFormats()
     formats_[TokenType::LatexDelimiter] = makeFormat(theme_.latexDelimiterFg);
     formats_[TokenType::LatexCommand]   = makeFormat(theme_.latexCommandFg);
     formats_[TokenType::LatexBrace]     = makeFormat(theme_.latexBraceFg);
-    formats_[TokenType::LatexMathBody]  = makeFormat(theme_.latexMathBodyFg);
+    QTextCharFormat latexMathBodyFmt = makeFormat(theme_.latexMathBodyFg);
+    if (theme_.latexMathBodyFg == theme_.foreground) {
+        latexMathBodyFmt.setFontItalic(true);
+    }
+    formats_[TokenType::LatexMathBody]  = latexMathBodyFmt;
     formats_[TokenType::LatexEnvName]   = makeFormat(theme_.latexEnvNameFg);
     formats_[TokenType::LatexBeginEnd]  = makeFormat(theme_.latexCommandFg);
 

@@ -21,8 +21,8 @@ h6 = "#e879f9"
 [code]
 inlineFg  = "#f87171"
 inlineBg  = "#27272a"
-fenceFg   = "#e4e4e7"
-fenceBg   = "#00000000"
+fenceFg   = "#93c5fd"
+fenceBg   = "#242734"
 langFg    = "#71717a"
 
 [block]
@@ -44,5 +44,5 @@ hardBreak        = "#f43f5e"
 delimiter  = "#c084fc"
 command    = "#fb7185"
 brace      = "#fbbf24"
-mathBody   = "#e4e4e7"
+mathBody   = "#fde68a"
 envName    = "#34d399"

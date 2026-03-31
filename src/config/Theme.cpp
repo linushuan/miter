@@ -29,7 +29,7 @@ Theme Theme::darkDefault()
     t.codeInlineFg    = QColor("#ffa94d");
     t.codeInlineBg    = QColor("#2a1f14");
     t.codeFenceFg     = QColor("#ffd59e");
-    t.codeFenceBg     = QColor("#00000000");
+    t.codeFenceBg     = QColor("#1a2330");
     t.codeFenceLangFg = QColor("#51cf66");
 
     t.blockquoteFg       = QColor("#9bb0cb");
