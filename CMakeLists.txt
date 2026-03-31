@@ -41,6 +41,7 @@ endif()
 
 qt_add_resources(miter "miter_themes"
     PREFIX "/themes"
+    BASE themes
     FILES
         themes/dark.toml
         themes/white.toml
@@ -48,6 +49,7 @@ qt_add_resources(miter "miter_themes"
 
 qt_add_resources(miter "miter_icons"
     PREFIX "/icons"
+    BASE assets/icons
     FILES
         assets/icons/miter.svg
 )
@@ -99,7 +101,14 @@ if((APPLE OR WIN32) AND COMMAND qt_generate_deploy_app_script)
 endif()
 
 if(UNIX AND NOT APPLE)
-    install(FILES miter.desktop DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications)
+    set(MITER_DESKTOP_EXEC "${CMAKE_INSTALL_FULL_BINDIR}/miter")
+    configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/miter.desktop.in
+        ${CMAKE_CURRENT_BINARY_DIR}/miter.desktop
+        @ONLY
+    )
+
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/miter.desktop DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications)
     install(FILES assets/icons/miter.svg DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps)
 endif()
 

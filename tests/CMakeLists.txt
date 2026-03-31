@@ -56,3 +56,18 @@ add_executable(test_md_editor
 target_include_directories(test_md_editor PRIVATE ../src)
 target_link_libraries(test_md_editor Qt6::Test Qt6::Widgets Qt6::Core Qt6::Gui)
 add_test(NAME test_md_editor COMMAND test_md_editor)
+
+add_executable(test_highlighter
+    test_highlighter.cpp
+    ../src/highlight/MdHighlighter.cpp
+    ../src/parser/BlockParser.cpp
+    ../src/parser/InlineParser.cpp
+    ../src/parser/LatexParser.cpp
+    ../src/parser/ContextStack.cpp
+    ../src/config/Theme.cpp
+    ../src/util/CjkUtil.cpp
+    ../src/util/TomlParser.cpp
+)
+target_include_directories(test_highlighter PRIVATE ../src)
+target_link_libraries(test_highlighter Qt6::Test Qt6::Core Qt6::Gui)
+add_test(NAME test_highlighter COMMAND test_highlighter)

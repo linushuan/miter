@@ -98,11 +98,27 @@ void MdHighlighter::highlightBlock(const QString &text)
         blockTokens.append({0, textLen, TokenType::HeadingH2});
         blockType = BlockType::Heading;
     }
-    // Mark setext underline itself
-    if (BlockParser::isSetextH1Underline(text) || BlockParser::isSetextH2Underline(text)) {
-        if (currentBlock().previous().isValid()) {
-            blockTokens.clear();
-            blockTokens.append({0, textLen, TokenType::SetextMarker});
+    // Mark setext underline itself. Only do this for normal/HR lines so we do
+    // not override fenced code, LaTeX, HTML comments, etc.
+    const bool isSetextUnderline =
+        BlockParser::isSetextH1Underline(text) || BlockParser::isSetextH2Underline(text);
+    if (isSetextUnderline &&
+        (blockType == BlockType::Normal || blockType == BlockType::HR) &&
+        ctx.topState() == BlockState::Normal) {
+        const QTextBlock prevBlock = currentBlock().previous();
+        if (prevBlock.isValid() && !prevBlock.text().trimmed().isEmpty()) {
+            QVector<BlockToken> containerTokens;
+            for (const auto &token : blockTokens) {
+                if (token.type == TokenType::BlockquoteMark || token.type == TokenType::ListBullet) {
+                    containerTokens.append(token);
+                }
+            }
+
+            blockTokens = containerTokens;
+            const int contentOffset = computeContentOffset();
+            if (contentOffset < textLen) {
+                blockTokens.append({contentOffset, textLen - contentOffset, TokenType::SetextMarker});
+            }
         }
     }
 

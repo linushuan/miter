@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=miter
+Comment=Minimal Markdown Editor
+Exec=@MITER_DESKTOP_EXEC@ %F
+Icon=miter
+Terminal=false
+Categories=Utility;TextEditor;
+MimeType=text/markdown;text/plain;
+StartupNotify=true
