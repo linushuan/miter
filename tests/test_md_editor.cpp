@@ -428,6 +428,38 @@ private slots:
         QCOMPARE(editor_->textCursor().positionInBlock(), 3);
     }
 
+    void testSecondEnterOnEmptyBlockquoteExitsQuote()
+    {
+        editor_->setPlainText("> quote");
+
+        QTextCursor cursor = editor_->textCursor();
+        cursor.movePosition(QTextCursor::End);
+        editor_->setTextCursor(cursor);
+
+        QTest::keyClick(editor_, Qt::Key_Return);
+        QTest::keyClick(editor_, Qt::Key_Return);
+
+        QCOMPARE(editor_->toPlainText(), QString("> quote\n"));
+        QCOMPARE(editor_->textCursor().blockNumber(), 1);
+        QCOMPARE(editor_->textCursor().positionInBlock(), 0);
+    }
+
+    void testSecondEnterOnEmptyCompactBlockquoteExitsQuote()
+    {
+        editor_->setPlainText(">>compact");
+
+        QTextCursor cursor = editor_->textCursor();
+        cursor.movePosition(QTextCursor::End);
+        editor_->setTextCursor(cursor);
+
+        QTest::keyClick(editor_, Qt::Key_Return);
+        QTest::keyClick(editor_, Qt::Key_Return);
+
+        QCOMPARE(editor_->toPlainText(), QString(">>compact\n"));
+        QCOMPARE(editor_->textCursor().blockNumber(), 1);
+        QCOMPARE(editor_->textCursor().positionInBlock(), 0);
+    }
+
     void testEnterAfterHorizontalRuleDoesNotStartList_data()
     {
         QTest::addColumn<QString>("line");
@@ -553,6 +585,42 @@ private slots:
     {
         QFontInfo info(editor_->font());
         QVERIFY(info.fixedPitch());
+    }
+
+    void testEscapeBackslashPreventsParenAutopair()
+    {
+        editor_->clear();
+
+        QTest::keyClicks(editor_, "\\");
+        QTest::keyClicks(editor_, "(");
+
+        QCOMPARE(editor_->toPlainText(), QString("\\("));
+        QCOMPARE(editor_->textCursor().positionInBlock(), 2);
+    }
+
+    void testEscapeBackslashPreventsAngleAutopair()
+    {
+        editor_->clear();
+
+        QTest::keyClicks(editor_, "\\");
+        QTest::keyClicks(editor_, "<");
+
+        QCOMPARE(editor_->toPlainText(), QString("\\<"));
+        QCOMPARE(editor_->textCursor().positionInBlock(), 2);
+    }
+
+    void testEscapeBackslashPreventsSkipOverExistingCloser()
+    {
+        editor_->setPlainText("\\)");
+
+        QTextCursor cursor = editor_->textCursor();
+        cursor.setPosition(1);
+        editor_->setTextCursor(cursor);
+
+        QTest::keyClicks(editor_, ")");
+
+        QCOMPARE(editor_->toPlainText(), QString("\\))"));
+        QCOMPARE(editor_->textCursor().positionInBlock(), 2);
     }
 
     void testWhiteThemeKeepsImePreeditColorsReadable()

@@ -268,6 +268,19 @@ bool hasNonSpaceTextAfterCursorInBlock(const QTextCursor &cursor)
     return false;
 }
 
+bool isEscapedByBackslashBeforeCursor(const QString &line, int cursorPos)
+{
+    if (cursorPos <= 0 || cursorPos > line.size()) {
+        return false;
+    }
+
+    int slashCount = 0;
+    for (int i = cursorPos - 1; i >= 0 && line[i] == QLatin1Char('\\'); --i) {
+        ++slashCount;
+    }
+    return (slashCount % 2) == 1;
+}
+
 bool shouldAutoClosePair(const QTextCursor &cursor, QChar opener)
 {
     if (cursor.hasSelection()) {
@@ -307,6 +320,63 @@ bool matchBlockquoteLine(const QString &line,
         *content = m.captured(2);
     }
     return true;
+}
+
+bool parseBlockquotePrefixShape(const QString &prefix, int *indent = nullptr, int *depth = nullptr)
+{
+    int localIndent = 0;
+    while (localIndent < prefix.size() && prefix[localIndent] == QLatin1Char(' ')) {
+        ++localIndent;
+    }
+
+    int localDepth = 0;
+    for (int i = localIndent; i < prefix.size(); ++i) {
+        if (prefix[i] == QLatin1Char('>')) {
+            ++localDepth;
+        }
+    }
+
+    if (localDepth <= 0) {
+        return false;
+    }
+
+    if (indent) {
+        *indent = localIndent;
+    }
+    if (depth) {
+        *depth = localDepth;
+    }
+    return true;
+}
+
+bool hasSameBlockquoteContextBefore(const QTextBlock &block, const QString &prefix)
+{
+    int indent = 0;
+    int depth = 0;
+    if (!parseBlockquotePrefixShape(prefix, &indent, &depth)) {
+        return false;
+    }
+
+    QTextBlock prev = block.previous();
+    while (prev.isValid() && prev.text().trimmed().isEmpty()) {
+        prev = prev.previous();
+    }
+    if (!prev.isValid()) {
+        return false;
+    }
+
+    QString prevPrefix;
+    if (!matchBlockquoteLine(prev.text(), &prevPrefix, nullptr)) {
+        return false;
+    }
+
+    int prevIndent = 0;
+    int prevDepth = 0;
+    if (!parseBlockquotePrefixShape(prevPrefix, &prevIndent, &prevDepth)) {
+        return false;
+    }
+
+    return prevIndent == indent && prevDepth == depth;
 }
 
 bool isStandaloneLatexDisplayFenceLine(const QString &line)
@@ -601,6 +671,7 @@ void MdEditor::keyPressEvent(QKeyEvent *event)
             const QString line = cursor.block().text();
             const int pos = cursor.positionInBlock();
             const QChar typed = input[0];
+            const bool escapedByBackslash = isEscapedByBackslashBeforeCursor(line, pos);
 
             auto skipExistingCloser = [&](QChar closer) {
                 if (pos < line.size() && line[pos] == closer) {
@@ -612,14 +683,16 @@ void MdEditor::keyPressEvent(QKeyEvent *event)
                 return false;
             };
 
-            if (typed == QLatin1Char(')') ||
-                typed == QLatin1Char(']') ||
-                typed == QLatin1Char('}') ||
-                typed == QLatin1Char('>') ||
-                typed == QLatin1Char('$') ||
-                typed == QLatin1Char('`')) {
-                if (skipExistingCloser(typed)) {
-                    return;
+            if (!escapedByBackslash) {
+                if (typed == QLatin1Char(')') ||
+                    typed == QLatin1Char(']') ||
+                    typed == QLatin1Char('}') ||
+                    typed == QLatin1Char('>') ||
+                    typed == QLatin1Char('$') ||
+                    typed == QLatin1Char('`')) {
+                    if (skipExistingCloser(typed)) {
+                        return;
+                    }
                 }
             }
 
@@ -641,7 +714,7 @@ void MdEditor::keyPressEvent(QKeyEvent *event)
                 supportsAutoClose = false;
             }
 
-            if (supportsAutoClose && shouldAutoClosePair(cursor, typed)) {
+            if (!escapedByBackslash && supportsAutoClose && shouldAutoClosePair(cursor, typed)) {
                 cursor.beginEditBlock();
                 cursor.insertText(QString(typed) + QString(closer));
                 cursor.movePosition(QTextCursor::Left);
@@ -721,7 +794,8 @@ void MdEditor::keyPressEvent(QKeyEvent *event)
         QString unorderedCheckbox;
         QString unorderedContent;
         int unorderedContentStart = 0;
-        const bool unorderedCandidate = !ordered && matchUnorderedListLine(
+        const bool horizontalRule = isHorizontalRuleLine(currentLine);
+        const bool unorderedCandidate = !ordered && !horizontalRule && matchUnorderedListLine(
             currentLine,
             &unorderedIndent,
             &unorderedMarker,
@@ -729,7 +803,7 @@ void MdEditor::keyPressEvent(QKeyEvent *event)
             &unorderedContent,
             &unorderedContentStart
         );
-        const bool unordered = unorderedCandidate && !isHorizontalRuleLine(currentLine);
+        const bool unordered = unorderedCandidate;
 
         const int paragraphIndent = leadingSpaceCount(currentLine);
 
@@ -743,6 +817,7 @@ void MdEditor::keyPressEvent(QKeyEvent *event)
 
         const bool emptyListItem = (ordered && orderedContent.trimmed().isEmpty())
             || (unordered && unorderedContent.trimmed().isEmpty());
+        const bool emptyBlockquote = blockquote && blockquoteContent.trimmed().isEmpty();
 
         auto clearCurrentEmptyListMarker = [&]() {
             if (!emptyListItem) {
@@ -771,11 +846,33 @@ void MdEditor::keyPressEvent(QKeyEvent *event)
             return true;
         };
 
+        auto clearCurrentEmptyBlockquotePrefix = [&]() {
+            if (!emptyBlockquote) {
+                return false;
+            }
+            if (!hasSameBlockquoteContextBefore(cursor.block(), blockquotePrefix)) {
+                return false;
+            }
+
+            const int blockStart = cursor.block().position();
+            QTextCursor editCursor = cursor;
+            editCursor.setPosition(blockStart);
+            editCursor.setPosition(blockStart + blockquotePrefix.length(), QTextCursor::KeepAnchor);
+            editCursor.removeSelectedText();
+            editCursor.clearSelection();
+            editCursor.setPosition(blockStart);
+            setTextCursor(editCursor);
+            return true;
+        };
+
         if (shiftEnter) {
             if (clearCurrentEmptyListMarker()) {
                 if (ordered) {
                     renumberOrderedLists();
                 }
+                return;
+            }
+            if (clearCurrentEmptyBlockquotePrefix()) {
                 return;
             }
             QPlainTextEdit::keyPressEvent(event);
@@ -791,6 +888,10 @@ void MdEditor::keyPressEvent(QKeyEvent *event)
             if (ordered) {
                 renumberOrderedLists();
             }
+            return;
+        }
+
+        if (clearCurrentEmptyBlockquotePrefix()) {
             return;
         }
 

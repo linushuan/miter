@@ -181,6 +181,55 @@ private slots:
         QCOMPARE(fmt.foreground().color(), theme.heading[0]);
     }
 
+    void testSetextH1HeadingLineUpdatesWhenTextInsertedAboveUnderline()
+    {
+        const Theme theme = Theme::darkDefault();
+        QTextDocument doc;
+        MdHighlighter highlighter(&doc, theme);
+
+        doc.setPlainText("===\n");
+        highlighter.rehighlight();
+
+        QTextCursor cursor(&doc);
+        cursor.movePosition(QTextCursor::Start);
+        cursor.insertText("Title\n");
+        QCoreApplication::processEvents();
+
+        const QTextCharFormat headingFmt = firstCharFormat(doc, 0);
+        QVERIFY(headingFmt.isValid());
+        QCOMPARE(headingFmt.foreground().color(), theme.heading[0]);
+
+        const QTextCharFormat underlineFmt = firstCharFormat(doc, 1);
+        QVERIFY(underlineFmt.isValid());
+        QCOMPARE(underlineFmt.foreground().color(), theme.markerFg);
+    }
+
+    void testHrVariantKeepsHrFormat_data()
+    {
+        QTest::addColumn<QString>("line");
+
+        QTest::newRow("compact-dash") << QString("---");
+        QTest::newRow("compact-star") << QString("***");
+        QTest::newRow("spaced-dash") << QString("- - -");
+        QTest::newRow("spaced-star") << QString("* * *");
+    }
+
+    void testHrVariantKeepsHrFormat()
+    {
+        QFETCH(QString, line);
+
+        const Theme theme = Theme::darkDefault();
+        QTextDocument doc;
+        MdHighlighter highlighter(&doc, theme);
+
+        doc.setPlainText(line);
+        highlighter.rehighlight();
+
+        const QTextCharFormat fmt = firstCharFormat(doc, 0);
+        QVERIFY(fmt.isValid());
+        QCOMPARE(fmt.foreground().color(), theme.hrFg);
+    }
+
     void testHrAfterBlankLineKeepsHrFormat()
     {
         const Theme theme = Theme::darkDefault();
@@ -197,7 +246,12 @@ private slots:
 
     void testBlockquoteUsesGrayBackground()
     {
-        const Theme theme = Theme::darkDefault();
+        Theme theme = Theme::darkDefault();
+        theme.background = QColor(QStringLiteral("#ffffff"));
+        theme.foreground = QColor(QStringLiteral("#18181b"));
+        theme.lineNumberBg = QColor(QStringLiteral("#ffffff"));
+        theme.blockquoteBorderFg = QColor(QStringLiteral("#d4d4d8"));
+
         QTextDocument doc;
         MdHighlighter highlighter(&doc, theme);
 
@@ -211,10 +265,11 @@ private slots:
         QVERIFY(markFmt.isValid());
         QVERIFY(bodyFmt.isValid());
 
-        QColor expected = theme.lineNumberBg;
-        expected.setAlpha(84);
+        QColor expected = theme.blockquoteBorderFg;
+        expected.setAlpha(112);
         QCOMPARE(markFmt.background().color(), expected);
         QCOMPARE(bodyFmt.background().color(), expected);
+        QVERIFY(expected != theme.background);
     }
 
     void testStrikethroughUsesStrikeOutFont()

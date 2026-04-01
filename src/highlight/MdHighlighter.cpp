@@ -68,10 +68,20 @@ void MdHighlighter::highlightBlock(const QString &text)
     // on potential underline edits to avoid reentrant highlighting crashes.
     if (!setextSyncInProgress_ && !setextRefreshPending_ && ctx.topState() == BlockState::Normal) {
         const QString trimmed = text.trimmed();
+        const QTextBlock prevBlock = currentBlock().previous();
+        const QTextBlock nextBlock = currentBlock().next();
+        const bool hasAdjacentSetextUnderline =
+            (prevBlock.isValid() &&
+             (BlockParser::isSetextH1Underline(prevBlock.text()) ||
+              BlockParser::isSetextH2Underline(prevBlock.text()))) ||
+            (nextBlock.isValid() &&
+             (BlockParser::isSetextH1Underline(nextBlock.text()) ||
+              BlockParser::isSetextH2Underline(nextBlock.text())));
         const bool maybeSetextRelated =
             trimmed.isEmpty() ||
             trimmed.startsWith(QLatin1Char('-')) ||
-            trimmed.startsWith(QLatin1Char('='));
+            trimmed.startsWith(QLatin1Char('=')) ||
+            hasAdjacentSetextUnderline;
 
         if (maybeSetextRelated) {
             setextRefreshPending_ = true;
@@ -304,8 +314,8 @@ void MdHighlighter::buildFormats()
     formats_[TokenType::InlineCodeMark] = makeFormat(theme_.markerFg);
 
     // Blockquote
-    QColor blockquoteBg = theme_.lineNumberBg;
-    blockquoteBg.setAlpha(84);
+    QColor blockquoteBg = theme_.blockquoteBorderFg;
+    blockquoteBg.setAlpha(112);
     formats_[TokenType::BlockquoteMark] = makeFormat(theme_.blockquoteBorderFg, false, false, blockquoteBg);
     formats_[TokenType::BlockquoteBody] = makeFormat(theme_.blockquoteFg, false, false, blockquoteBg);
 
