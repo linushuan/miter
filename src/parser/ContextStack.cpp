@@ -3,9 +3,6 @@
 
 #include "ContextStack.h"
 
-#include <QDataStream>
-#include <QIODevice>
-
 void ContextStack::push(ContextFrame frame)
 {
     stack_.push(frame);
@@ -65,44 +62,3 @@ void ContextStack::clear()
     stack_.clear();
 }
 
-QByteArray ContextStack::serialize() const
-{
-    QByteArray data;
-    QDataStream stream(&data, QIODevice::WriteOnly);
-
-    stream << static_cast<int>(stack_.size());
-    for (const auto &frame : stack_) {
-        stream << static_cast<int>(frame.state)
-               << frame.depth
-               << frame.fenceChar
-               << frame.fenceLen
-               << frame.envName
-               << frame.listIndent;
-    }
-    return data;
-}
-
-ContextStack ContextStack::deserialize(const QByteArray &data)
-{
-    ContextStack ctx;
-    if (data.isEmpty())
-        return ctx;
-
-    QDataStream stream(data);
-    int count;
-    stream >> count;
-
-    for (int i = 0; i < count; ++i) {
-        ContextFrame frame;
-        int state;
-        stream >> state
-               >> frame.depth
-               >> frame.fenceChar
-               >> frame.fenceLen
-               >> frame.envName
-               >> frame.listIndent;
-        frame.state = static_cast<BlockState>(state);
-        ctx.push(frame);
-    }
-    return ctx;
-}

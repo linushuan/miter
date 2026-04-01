@@ -4,7 +4,7 @@
 #pragma once
 
 #include <QStack>
-#include <QByteArray>
+
 #include <QString>
 #include <QChar>
 
@@ -42,9 +42,7 @@ public:
     int  size() const;
     void clear();
 
-    // Serialization helper kept for tests and potential persistence features.
-    QByteArray          serialize() const;
-    static ContextStack deserialize(const QByteArray &data);
+
 
 private:
     QStack<ContextFrame> stack_;

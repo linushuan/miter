@@ -256,9 +256,19 @@ bool BlockParser::classifyInOpenContext(const QString &text,
     return false;
 }
 
-BlockType BlockParser::classifyInNormalContext(const QString &text,
-                                               ContextStack &ctx,
-                                               QVector<BlockToken> &tokens)
+namespace {
+// Shared state for normal-context classification helpers.
+struct ClassifyContext {
+    const QString &text;
+    int            textLen;
+    PrefixInfo     prefix;
+    int            contentOffset;
+    QString        content;
+    int            contentLen;
+    int            firstNonSpace;
+};
+
+ClassifyContext buildClassifyContext(const QString &text)
 {
     const int textLen = static_cast<int>(text.length());
     const PrefixInfo prefix = parseContainerPrefix(text, -1, true);
@@ -271,161 +281,233 @@ BlockType BlockParser::classifyInNormalContext(const QString &text,
         ++firstNonSpace;
     }
 
-    if (firstNonSpace + 3 < contentLen &&
-        content[firstNonSpace] == QLatin1Char('<') &&
-        content[firstNonSpace + 1] == QLatin1Char('!') &&
-        content[firstNonSpace + 2] == QLatin1Char('-') &&
-        content[firstNonSpace + 3] == QLatin1Char('-')) {
-        appendContainerMarkers(prefix, tokens);
+    return {text, textLen, prefix, contentOffset, content, contentLen, firstNonSpace};
+}
 
-        const int closePos = content.indexOf(QStringLiteral("-->"), firstNonSpace + 4);
-        if (closePos >= 0) {
-            tokens.append({
-                contentOffset + firstNonSpace,
-                closePos + 3 - firstNonSpace,
-                TokenType::HtmlComment
-            });
-        } else {
-            tokens.append({
-                contentOffset + firstNonSpace,
-                contentLen - firstNonSpace,
-                TokenType::HtmlComment
-            });
-            ContextFrame frame;
-            frame.state = BlockState::HtmlComment;
-            frame.depth = prefix.blockquoteDepth;
-            frame.listIndent = prefix.hasList ? (prefix.listEnd - prefix.listStart) : 0;
-            ctx.push(frame);
-        }
-        return BlockType::HtmlComment;
+int containerListIndent(const PrefixInfo &prefix)
+{
+    return prefix.hasList ? (prefix.listEnd - prefix.listStart) : 0;
+}
+
+bool tryClassifyHtmlComment(ClassifyContext &c, ContextStack &ctx, QVector<BlockToken> &tokens, BlockType &out)
+{
+    if (c.firstNonSpace + 3 >= c.contentLen ||
+        c.content[c.firstNonSpace]     != QLatin1Char('<') ||
+        c.content[c.firstNonSpace + 1] != QLatin1Char('!') ||
+        c.content[c.firstNonSpace + 2] != QLatin1Char('-') ||
+        c.content[c.firstNonSpace + 3] != QLatin1Char('-')) {
+        return false;
     }
 
+    appendContainerMarkers(c.prefix, tokens);
+
+    const int closePos = c.content.indexOf(QStringLiteral("-->"), c.firstNonSpace + 4);
+    if (closePos >= 0) {
+        tokens.append({
+            c.contentOffset + c.firstNonSpace,
+            closePos + 3 - c.firstNonSpace,
+            TokenType::HtmlComment
+        });
+    } else {
+        tokens.append({
+            c.contentOffset + c.firstNonSpace,
+            c.contentLen - c.firstNonSpace,
+            TokenType::HtmlComment
+        });
+        ContextFrame frame;
+        frame.state = BlockState::HtmlComment;
+        frame.depth = c.prefix.blockquoteDepth;
+        frame.listIndent = containerListIndent(c.prefix);
+        ctx.push(frame);
+    }
+    out = BlockType::HtmlComment;
+    return true;
+}
+
+bool tryClassifyATXHeading(ClassifyContext &c, QVector<BlockToken> &tokens, BlockType &out)
+{
     int level = 0;
     int headingStart = 0;
     int headingEnd = 0;
-    if (matchATXHeading(content, level, headingStart, headingEnd)) {
-        appendContainerMarkers(prefix, tokens);
-        tokens.append({contentOffset, headingStart, TokenType::HeadingMarker});
-
-        TokenType headingType = static_cast<TokenType>(
-            static_cast<int>(TokenType::HeadingH1) + level - 1);
-        tokens.append({contentOffset + headingStart, headingEnd - headingStart, headingType});
-        return BlockType::Heading;
+    if (!BlockParser::matchATXHeading(c.content, level, headingStart, headingEnd)) {
+        return false;
     }
 
+    appendContainerMarkers(c.prefix, tokens);
+    tokens.append({c.contentOffset, headingStart, TokenType::HeadingMarker});
+
+    TokenType headingType = static_cast<TokenType>(
+        static_cast<int>(TokenType::HeadingH1) + level - 1);
+    tokens.append({c.contentOffset + headingStart, headingEnd - headingStart, headingType});
+    out = BlockType::Heading;
+    return true;
+}
+
+bool tryClassifyCodeFence(ClassifyContext &c, ContextStack &ctx, QVector<BlockToken> &tokens, BlockType &out)
+{
     QChar fenceChar;
     int fenceLen = 0;
     int indent = 0;
     QString lang;
-    if (matchCodeFenceStart(content, fenceChar, fenceLen, indent, lang)) {
-        appendContainerMarkers(prefix, tokens);
-        tokens.append({contentOffset, contentLen, TokenType::CodeFenceMark});
-
-        if (!lang.isEmpty()) {
-            const int langStart = content.indexOf(lang);
-            if (langStart >= 0) {
-                tokens.append({
-                    contentOffset + langStart,
-                    static_cast<int>(lang.length()),
-                    TokenType::CodeFenceLang
-                });
-            }
-        }
-
-        ContextFrame frame;
-        frame.state = BlockState::CodeFence;
-        frame.fenceChar = fenceChar;
-        frame.fenceLen = fenceLen;
-        frame.depth = prefix.blockquoteDepth;
-        frame.listIndent = prefix.hasList ? (prefix.listEnd - prefix.listStart) : 0;
-        ctx.push(frame);
-        return BlockType::CodeFenceStart;
+    if (!BlockParser::matchCodeFenceStart(c.content, fenceChar, fenceLen, indent, lang)) {
+        return false;
     }
 
+    appendContainerMarkers(c.prefix, tokens);
+    tokens.append({c.contentOffset, c.contentLen, TokenType::CodeFenceMark});
+
+    if (!lang.isEmpty()) {
+        const int langStart = c.content.indexOf(lang);
+        if (langStart >= 0) {
+            tokens.append({
+                c.contentOffset + langStart,
+                static_cast<int>(lang.length()),
+                TokenType::CodeFenceLang
+            });
+        }
+    }
+
+    ContextFrame frame;
+    frame.state = BlockState::CodeFence;
+    frame.fenceChar = fenceChar;
+    frame.fenceLen = fenceLen;
+    frame.depth = c.prefix.blockquoteDepth;
+    frame.listIndent = containerListIndent(c.prefix);
+    ctx.push(frame);
+    out = BlockType::CodeFenceStart;
+    return true;
+}
+
+bool tryClassifyLatex(ClassifyContext &c, ContextStack &ctx, QVector<BlockToken> &tokens, BlockType &out)
+{
+    // Single-line $$ ... $$
     static QRegularExpression singleLineDisplayRe(R"(^\s*(\$\$)\s*(.+?)\s*(\$\$)\s*$)");
-    const auto displayMatch = singleLineDisplayRe.match(content);
+    const auto displayMatch = singleLineDisplayRe.match(c.content);
     if (displayMatch.hasMatch()) {
-        const int openStart = displayMatch.capturedStart(1);
-        const int openLen = displayMatch.capturedLength(1);
+        const int openStart  = displayMatch.capturedStart(1);
+        const int openLen    = displayMatch.capturedLength(1);
         const int innerStart = displayMatch.capturedStart(2);
-        const int innerEnd = displayMatch.capturedEnd(2);
+        const int innerEnd   = displayMatch.capturedEnd(2);
         const int closeStart = displayMatch.capturedStart(3);
-        const int closeLen = displayMatch.capturedLength(3);
+        const int closeLen   = displayMatch.capturedLength(3);
 
-        appendContainerMarkers(prefix, tokens);
-
-        tokens.append({contentOffset + openStart, openLen, TokenType::LatexDelimiter});
+        appendContainerMarkers(c.prefix, tokens);
+        tokens.append({c.contentOffset + openStart, openLen, TokenType::LatexDelimiter});
         if (innerEnd > innerStart) {
-            tokens.append({contentOffset + innerStart, innerEnd - innerStart, TokenType::LatexMathBody});
+            tokens.append({c.contentOffset + innerStart, innerEnd - innerStart, TokenType::LatexMathBody});
         }
-        tokens.append({contentOffset + closeStart, closeLen, TokenType::LatexDelimiter});
-        return BlockType::LatexDisplayBody;
+        tokens.append({c.contentOffset + closeStart, closeLen, TokenType::LatexDelimiter});
+        out = BlockType::LatexDisplayBody;
+        return true;
     }
 
-    if (isStandaloneLatexDisplayFence(content)) {
-        appendContainerMarkers(prefix, tokens);
-        tokens.append({contentOffset, contentLen, TokenType::LatexDelimiter});
+    // Standalone $$ fence
+    if (BlockParser::isStandaloneLatexDisplayFence(c.content)) {
+        appendContainerMarkers(c.prefix, tokens);
+        tokens.append({c.contentOffset, c.contentLen, TokenType::LatexDelimiter});
 
         ContextFrame frame;
         frame.state = BlockState::LatexDisplay;
-        frame.depth = prefix.blockquoteDepth;
-        frame.listIndent = prefix.hasList ? (prefix.listEnd - prefix.listStart) : 0;
+        frame.depth = c.prefix.blockquoteDepth;
+        frame.listIndent = containerListIndent(c.prefix);
         ctx.push(frame);
-        return BlockType::LatexDisplayStart;
+        out = BlockType::LatexDisplayStart;
+        return true;
     }
 
-    static QRegularExpression beginRe(R"(^\s*\\begin\{([^}\s]+)\}\s*$)");
-    const auto beginMatch = beginRe.match(content);
+    // \begin{env}
+    static QRegularExpression beginRe(R"(^\s*\\begin\{([^\}\s]+)\}\s*$)");
+    const auto beginMatch = beginRe.match(c.content);
     if (beginMatch.hasMatch()) {
-        appendContainerMarkers(prefix, tokens);
-        tokens.append({contentOffset, contentLen, TokenType::LatexBeginEnd});
+        appendContainerMarkers(c.prefix, tokens);
+        tokens.append({c.contentOffset, c.contentLen, TokenType::LatexBeginEnd});
 
         ContextFrame frame;
         frame.state = BlockState::LatexEnv;
         frame.envName = beginMatch.captured(1);
-        frame.depth = prefix.blockquoteDepth;
-        frame.listIndent = prefix.hasList ? (prefix.listEnd - prefix.listStart) : 0;
+        frame.depth = c.prefix.blockquoteDepth;
+        frame.listIndent = containerListIndent(c.prefix);
         ctx.push(frame);
-        return BlockType::LatexEnvStart;
+        out = BlockType::LatexEnvStart;
+        return true;
     }
 
-    if (matchTable(content)) {
-        appendContainerMarkers(prefix, tokens);
-        for (int i = 0; i < contentLen; ++i) {
-            if (content[i] == QLatin1Char('|')) {
-                tokens.append({contentOffset + i, 1, TokenType::TablePipe});
-            }
+    return false;
+}
+
+bool tryClassifyTable(ClassifyContext &c, QVector<BlockToken> &tokens, BlockType &out)
+{
+    if (!BlockParser::matchTable(c.content)) {
+        return false;
+    }
+
+    appendContainerMarkers(c.prefix, tokens);
+    for (int i = 0; i < c.contentLen; ++i) {
+        if (c.content[i] == QLatin1Char('|')) {
+            tokens.append({c.contentOffset + i, 1, TokenType::TablePipe});
         }
-        return BlockType::Table;
+    }
+    out = BlockType::Table;
+    return true;
+}
+
+bool tryClassifyHR(ClassifyContext &c, QVector<BlockToken> &tokens, BlockType &out)
+{
+    if (!BlockParser::matchHR(c.content)) {
+        return false;
     }
 
-    if (matchHR(content)) {
-        appendContainerMarkers(prefix, tokens);
-        tokens.append({contentOffset, contentLen, TokenType::HR});
-        return BlockType::HR;
+    appendContainerMarkers(c.prefix, tokens);
+    tokens.append({c.contentOffset, c.contentLen, TokenType::HR});
+    out = BlockType::HR;
+    return true;
+}
+
+bool tryClassifyContainer(ClassifyContext &c, QVector<BlockToken> &tokens, BlockType &out)
+{
+    if (c.content.trimmed().isEmpty() && c.prefix.blockquoteDepth == 0 && !c.prefix.hasList) {
+        out = BlockType::BlankLine;
+        return true;
     }
 
-    if (content.trimmed().isEmpty() && prefix.blockquoteDepth == 0 && !prefix.hasList) {
-        return BlockType::BlankLine;
-    }
-
-    if (prefix.hasList) {
-        appendContainerMarkers(prefix, tokens);
-        tokens.append({contentOffset, textLen - contentOffset, TokenType::ListBody});
+    if (c.prefix.hasList) {
+        appendContainerMarkers(c.prefix, tokens);
+        tokens.append({c.contentOffset, c.textLen - c.contentOffset, TokenType::ListBody});
 
         int checkboxStart = 0;
         int checkboxLen = 0;
-        if (matchTaskCheckboxPrefix(content, &checkboxStart, &checkboxLen) && checkboxLen > 0) {
-            tokens.append({contentOffset + checkboxStart, checkboxLen, TokenType::CheckboxMarker});
+        if (matchTaskCheckboxPrefix(c.content, &checkboxStart, &checkboxLen) && checkboxLen > 0) {
+            tokens.append({c.contentOffset + checkboxStart, checkboxLen, TokenType::CheckboxMarker});
         }
-        return BlockType::ListItem;
+        out = BlockType::ListItem;
+        return true;
     }
 
-    if (prefix.blockquoteDepth > 0) {
-        appendContainerMarkers(prefix, tokens);
-        tokens.append({contentOffset, textLen - contentOffset, TokenType::BlockquoteBody});
-        return BlockType::Blockquote;
+    if (c.prefix.blockquoteDepth > 0) {
+        appendContainerMarkers(c.prefix, tokens);
+        tokens.append({c.contentOffset, c.textLen - c.contentOffset, TokenType::BlockquoteBody});
+        out = BlockType::Blockquote;
+        return true;
     }
+
+    return false;
+}
+}
+
+BlockType BlockParser::classifyInNormalContext(const QString &text,
+                                               ContextStack &ctx,
+                                               QVector<BlockToken> &tokens)
+{
+    ClassifyContext c = buildClassifyContext(text);
+    BlockType type;
+
+    if (tryClassifyHtmlComment(c, ctx, tokens, type)) return type;
+    if (tryClassifyATXHeading(c, tokens, type))       return type;
+    if (tryClassifyCodeFence(c, ctx, tokens, type))   return type;
+    if (tryClassifyLatex(c, ctx, tokens, type))       return type;
+    if (tryClassifyTable(c, tokens, type))            return type;
+    if (tryClassifyHR(c, tokens, type))               return type;
+    if (tryClassifyContainer(c, tokens, type))        return type;
 
     return BlockType::Normal;
 }

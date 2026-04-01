@@ -53,23 +53,7 @@ private slots:
         QCOMPARE(ctx.listDepth(), 2);
     }
 
-    void testSerializeDeserialize()
-    {
-        ContextStack ctx;
-        ContextFrame frame;
-        frame.state = BlockState::LatexEnv;
-        frame.envName = "equation";
-        frame.depth = 1;
-        ctx.push(frame);
 
-        QByteArray data = ctx.serialize();
-        ContextStack restored = ContextStack::deserialize(data);
-
-        QCOMPARE(restored.size(), 1);
-        QCOMPARE(restored.topState(), BlockState::LatexEnv);
-        QCOMPARE(restored.top().envName, QString("equation"));
-        QCOMPARE(restored.top().depth, 1);
-    }
 
     void testInLatex()
     {

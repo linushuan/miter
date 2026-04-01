@@ -76,8 +76,7 @@ void Settings::save() const
     out << "auto_save = " << (autoSave ? "true" : "false") << "\n";
     out << "auto_save_interval = " << autoSaveInterval << "\n";
     out << "show_hard_break = " << (showHardBreak ? "true" : "false") << "\n";
-    const int safeTabSize = normalizedTabSize(tabSize);
-    out << "tab_size = " << safeTabSize << "\n\n";
+    out << "tab_size = " << tabSize << "\n\n";
 
     out << "[session]\n";
     out << "restore = " << (restoreSession ? "true" : "false") << "\n\n";
