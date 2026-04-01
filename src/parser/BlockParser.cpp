@@ -533,8 +533,9 @@ bool tryClassifyTable(ClassifyContext &c, ContextStack &ctx, QVector<BlockToken>
     const QString nextContent = adjacentContentIfSameContainer(c.nextLine, c.prefix);
 
     const bool hasHeaderAbove = isSeparator && BlockParser::matchTable(prevContent);
+    const bool hasSeparatorAbove = BlockParser::matchTable(c.content) && BlockParser::matchTableSeparator(prevContent);
     const bool hasSeparatorBelow = BlockParser::matchTable(c.content) && BlockParser::matchTableSeparator(nextContent);
-    if (!hasHeaderAbove && !hasSeparatorBelow) {
+    if (!hasHeaderAbove && !hasSeparatorAbove && !hasSeparatorBelow) {
         return false;
     }
 
@@ -545,7 +546,7 @@ bool tryClassifyTable(ClassifyContext &c, ContextStack &ctx, QVector<BlockToken>
         }
     }
 
-    if (hasHeaderAbove) {
+    if (hasHeaderAbove || hasSeparatorAbove) {
         ContextFrame frame;
         frame.state = BlockState::Table;
         frame.depth = c.prefix.blockquoteDepth;

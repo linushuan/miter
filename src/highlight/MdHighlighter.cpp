@@ -125,6 +125,20 @@ void MdHighlighter::highlightBlock(const QString &text)
     if (!enabled_) return;
     const int textLen = static_cast<int>(text.length());
 
+    auto queueTableRefresh = [&]() {
+        if (tableSyncInProgress_ || tableRefreshPending_) {
+            return;
+        }
+
+        tableRefreshPending_ = true;
+        QMetaObject::invokeMethod(this, [this]() {
+            tableSyncInProgress_ = true;
+            rehighlight();
+            tableSyncInProgress_ = false;
+            tableRefreshPending_ = false;
+        }, Qt::QueuedConnection);
+    };
+
     // 1. Restore context from previous block
     ContextStack ctx = restoreContext();
 
@@ -257,6 +271,67 @@ void MdHighlighter::highlightBlock(const QString &text)
         }
     }
 
+    const int tableSyncOffset = computeContentOffset(blockTokens);
+    auto tableContentAtOffset = [&](const QTextBlock &block) {
+        if (!block.isValid()) {
+            return QString();
+        }
+
+        const QString blockText = block.text();
+        return blockText.mid(qMin(tableSyncOffset, static_cast<int>(blockText.length())));
+    };
+
+    auto isTableLikeLine = [&](const QString &lineContent) {
+        return BlockParser::matchTable(lineContent) || BlockParser::matchTableSeparator(lineContent);
+    };
+
+    auto hasSeparatorAnchorAbove = [&](QTextBlock scan) {
+        int guard = 0;
+        while (scan.isValid() && guard < 256) {
+            const QString scanContent = tableContentAtOffset(scan);
+            if (scanContent.trimmed().isEmpty()) {
+                return false;
+            }
+
+            if (BlockParser::matchTableSeparator(scanContent)) {
+                const QTextBlock headerBlock = scan.previous();
+                return headerBlock.isValid() && BlockParser::matchTable(tableContentAtOffset(headerBlock));
+            }
+
+            if (!BlockParser::matchTable(scanContent)) {
+                return false;
+            }
+
+            scan = scan.previous();
+            ++guard;
+        }
+
+        return false;
+    };
+
+    if (!tableSyncInProgress_ && !tableRefreshPending_ && blockType != BlockType::Table) {
+        const QString currentTableText = text.mid(tableSyncOffset);
+        const QString prevTableText = tableContentAtOffset(currentBlock().previous());
+        const QString nextTableText = tableContentAtOffset(currentBlock().next());
+
+        const bool currentIsTableRow = BlockParser::matchTable(currentTableText);
+        const bool currentIsSeparator = BlockParser::matchTableSeparator(currentTableText);
+        const bool adjacentTableLike = isTableLikeLine(prevTableText) || isTableLikeLine(nextTableText);
+        const bool bodyAnchoredToSeparator = currentIsTableRow && hasSeparatorAnchorAbove(currentBlock());
+        const bool blankBetweenTableLikeRows =
+            currentTableText.trimmed().isEmpty() &&
+            isTableLikeLine(prevTableText) &&
+            isTableLikeLine(nextTableText);
+
+        if ((currentIsSeparator && BlockParser::matchTable(prevTableText)) ||
+            bodyAnchoredToSeparator ||
+            (currentIsTableRow && adjacentTableLike) ||
+            blankBetweenTableLikeRows) {
+            // Incremental highlight can miss table state propagation across unchanged blocks.
+            queueTableRefresh();
+        }
+    }
+
     bool inBlockquoteContainer = false;
     for (const auto &token : blockTokens) {
         if (token.type == TokenType::BlockquoteMark) {
@@ -322,6 +397,16 @@ void MdHighlighter::highlightBlock(const QString &text)
                 const QString nextText = next.text();
                 const QString nextTableText = nextText.mid(qMin(tableOffset, static_cast<int>(nextText.length())));
                 isHeader = BlockParser::matchTableSeparator(nextTableText);
+            }
+        } else {
+            QTextBlock prev = currentBlock().previous();
+            if (prev.isValid()) {
+                const QString prevText = prev.text();
+                const QString prevTableText = prevText.mid(qMin(tableOffset, static_cast<int>(prevText.length())));
+                if (BlockParser::matchTable(prevTableText)) {
+                    // Header line depends on separator below, so refresh once.
+                    queueTableRefresh();
+                }
             }
         }
 

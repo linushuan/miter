@@ -47,5 +47,7 @@ private:
     bool enabled_ = true;
     bool setextSyncInProgress_ = false;
     bool setextRefreshPending_ = false;
+    bool tableSyncInProgress_ = false;
+    bool tableRefreshPending_ = false;
     int baseFontSize_ = 14;
 };

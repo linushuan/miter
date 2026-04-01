@@ -128,6 +128,12 @@ private slots:
         QCOMPARE(BlockParser::classify("| v1 | v2 |", ctx, tokens), BlockType::Table);
         QCOMPARE(BlockParser::classify("plain text", ctx, tokens), BlockType::Normal);
         QVERIFY(!ctx.inTable());
+
+        ContextStack freshCtx;
+        QCOMPARE(
+            BlockParser::classify("| v1 | v2 |", freshCtx, tokens, "| --- | --- |", "| v3 | v4 |"),
+            BlockType::Table);
+        QCOMPARE(freshCtx.topState(), BlockState::Table);
     }
 
     void testTable()

@@ -368,6 +368,57 @@ private slots:
         QCOMPARE(underlineFmt.foreground().color(), theme.markerFg);
     }
 
+    void testTableHeaderLineUpdatesWhenSeparatorTypedLater()
+    {
+        const Theme theme = Theme::darkDefault();
+        QTextDocument doc;
+        MdHighlighter highlighter(&doc, theme);
+
+        doc.setPlainText("| col1 | col2 |\n");
+        highlighter.rehighlight();
+
+        QTextCursor cursor(&doc);
+        cursor.movePosition(QTextCursor::End);
+        cursor.insertText("| --- | --- |");
+        QCoreApplication::processEvents();
+
+        const QTextBlock headerBlock = doc.findBlockByNumber(0);
+        const QTextCharFormat headerFmt = formatAt(headerBlock, 2);
+        QVERIFY(headerFmt.isValid());
+        QCOMPARE(headerFmt.background().color().alpha(), 56);
+
+        const QTextBlock separatorBlock = doc.findBlockByNumber(1);
+        const QTextCharFormat separatorFmt = formatAt(separatorBlock, 2);
+        QVERIFY(separatorFmt.isValid());
+        QCOMPARE(separatorFmt.foreground().color(), theme.tablePipeFg);
+    }
+
+    void testExistingBodyRowsUpdateWhenSeparatorInsertedLater()
+    {
+        const Theme theme = Theme::darkDefault();
+        QTextDocument doc;
+        MdHighlighter highlighter(&doc, theme);
+
+        doc.setPlainText("| col1 | col2 |\n| v1 | v2 |\n| v3 | v4 |");
+        highlighter.rehighlight();
+
+        QTextCursor cursor(&doc);
+        cursor.movePosition(QTextCursor::Start);
+        cursor.movePosition(QTextCursor::Down);
+        cursor.insertText("| --- | --- |\n");
+        QCoreApplication::processEvents();
+
+        const QTextBlock firstBodyBlock = doc.findBlockByNumber(2);
+        const QTextCharFormat firstBodyFmt = formatAt(firstBodyBlock, 2);
+        QVERIFY(firstBodyFmt.isValid());
+        QCOMPARE(firstBodyFmt.background().color().alpha(), 28);
+
+        const QTextBlock secondBodyBlock = doc.findBlockByNumber(3);
+        const QTextCharFormat secondBodyFmt = formatAt(secondBodyBlock, 2);
+        QVERIFY(secondBodyFmt.isValid());
+        QCOMPARE(secondBodyFmt.background().color().alpha(), 28);
+    }
+
     void testHrVariantKeepsHrFormat_data()
     {
         QTest::addColumn<QString>("line");
