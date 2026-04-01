@@ -18,6 +18,71 @@ public:
     ContextStack ctx_;
 };
 
+static bool looksLikeSetextMutationCandidate(const QString &text)
+{
+    const QString trimmed = text.trimmed();
+    if (trimmed.isEmpty()) {
+        return false;
+    }
+
+    const QChar marker = trimmed.front();
+    if (marker != QLatin1Char('-') &&
+        marker != QLatin1Char('*') &&
+        marker != QLatin1Char('=')) {
+        return false;
+    }
+
+    int markerCount = 0;
+    for (const QChar ch : trimmed) {
+        if (ch == marker) {
+            ++markerCount;
+            continue;
+        }
+        if (ch.isSpace()) {
+            continue;
+        }
+        return markerCount >= 2;
+    }
+
+    return markerCount >= 2;
+}
+
+bool MdHighlighter::blockStartsInsideLatexDisplay(const QTextBlock &block, bool *known) const
+{
+    return blockStartsInsideState(block, BlockState::LatexDisplay, known);
+}
+
+bool MdHighlighter::blockStartsInsideCodeFence(const QTextBlock &block, bool *known) const
+{
+    return blockStartsInsideState(block, BlockState::CodeFence, known);
+}
+
+bool MdHighlighter::blockStartsInsideState(const QTextBlock &block,
+                                           BlockState state,
+                                           bool *known) const
+{
+    const QTextBlock prevBlock = block.previous();
+    if (!prevBlock.isValid()) {
+        if (known) {
+            *known = true;
+        }
+        return false;
+    }
+
+    auto *data = dynamic_cast<ContextBlockData *>(prevBlock.userData());
+    if (!data) {
+        if (known) {
+            *known = false;
+        }
+        return false;
+    }
+
+    if (known) {
+        *known = true;
+    }
+    return data->ctx_.topState() == state;
+}
+
 MdHighlighter::MdHighlighter(QTextDocument *parent, const Theme &theme)
     : QSyntaxHighlighter(parent)
     , theme_(theme)
@@ -67,9 +132,11 @@ void MdHighlighter::highlightBlock(const QString &text)
     // Setext headings depend on the next line. Queue a single full refresh
     // on potential underline edits to avoid reentrant highlighting crashes.
     if (!setextSyncInProgress_ && !setextRefreshPending_ && ctx.topState() == BlockState::Normal) {
-        const QString trimmed = text.trimmed();
         const QTextBlock prevBlock = currentBlock().previous();
         const QTextBlock nextBlock = currentBlock().next();
+        const bool currentIsSetextUnderline =
+            BlockParser::isSetextH1Underline(text) ||
+            BlockParser::isSetextH2Underline(text);
         const bool hasAdjacentSetextUnderline =
             (prevBlock.isValid() &&
              (BlockParser::isSetextH1Underline(prevBlock.text()) ||
@@ -77,11 +144,15 @@ void MdHighlighter::highlightBlock(const QString &text)
             (nextBlock.isValid() &&
              (BlockParser::isSetextH1Underline(nextBlock.text()) ||
               BlockParser::isSetextH2Underline(nextBlock.text())));
+        const bool trailingBlankAfterText =
+            text.trimmed().isEmpty() &&
+            prevBlock.isValid() &&
+            !prevBlock.text().trimmed().isEmpty() &&
+            !nextBlock.isValid();
         const bool maybeSetextRelated =
-            trimmed.isEmpty() ||
-            trimmed.startsWith(QLatin1Char('-')) ||
-            trimmed.startsWith(QLatin1Char('=')) ||
-            trimmed.startsWith(QLatin1Char('*')) ||
+            currentIsSetextUnderline ||
+            looksLikeSetextMutationCandidate(text) ||
+            trailingBlankAfterText ||
             hasAdjacentSetextUnderline;
 
         if (maybeSetextRelated) {

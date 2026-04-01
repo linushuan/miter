@@ -33,4 +33,5 @@ struct Settings {
     static Settings load();
     void            save() const;
     static QString  configPath();
+    static int      normalizedTabSize(int tabSize);
 };

@@ -120,6 +120,15 @@ private slots:
         QCOMPARE(BlockParser::classify("| col1 | col2 |", ctx, tokens), BlockType::Table);
     }
 
+    void testSinglePipeTextIsNotTable()
+    {
+        ContextStack ctx;
+        QVector<BlockToken> tokens;
+
+        QCOMPARE(BlockParser::classify("a | b", ctx, tokens), BlockType::Normal);
+        QCOMPARE(BlockParser::classify("plain|text", ctx, tokens), BlockType::Normal);
+    }
+
     void testLatexDisplayStart()
     {
         ContextStack ctx;

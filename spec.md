@@ -12,6 +12,10 @@ Implementation mapping:
 - LaTeX inline/body tokenization: `src/parser/LatexParser.cpp`
 - Stateful highlight rendering: `src/highlight/MdHighlighter.cpp`
 - Keyboard and Enter autocomplete: `src/editor/MdEditor.cpp`
+- Shared list/quote line matching used by both parser and editor:
+  - `BlockParser::parseOrderedListLine`
+  - `BlockParser::parseUnorderedListLine`
+  - `BlockParser::parseBlockquoteLine`
 - Regression tests: `tests/`
 
 ## 2. Processing Model
@@ -118,6 +122,8 @@ When cursor is at end-of-line and Enter is pressed (without Shift):
 - Lists auto-continue on Enter.
 - Blockquotes auto-continue using current indentation and quote depth.
 - HR lines (`***`, `- - -`, `* * *`) do not trigger list continuation.
+- Enter/list continuation matching rules come from `BlockParser` shared parsers
+  (editor no longer keeps a second regex implementation).
 
 ### 5.4 Explicit non-autocomplete syntax
 
@@ -146,11 +152,26 @@ Key visual rules:
 Setext headings require a lookahead to the next block.
 To avoid stale formatting and crashes:
 
-- Potential setext-affecting edits queue a full rehighlight.
+- Full rehighlight is queued only for setext-relevant edits:
+  - current line is a setext underline,
+  - adjacent line is a setext underline,
+  - or current line is a likely underline mutation candidate.
 - Rehighlight is queued through Qt event loop.
 - Reentrant highlighting is explicitly prevented.
 
-## 8. Edge Cases Required By This Spec
+## 8. Runtime Cost Constraints
+
+The editor keeps these interactions bounded for large documents:
+
+- Focus mode dims visible viewport blocks only (not full-document iteration on each cursor move).
+- Enter handling for `$$` / code fence auto-close reads existing parser context from
+  highlighter block data in O(1), with scan fallback only if context is unavailable.
+- Word/char stats updates are debounced (single-shot timer) and no longer double-triggered
+  by both `textChanged` and `cursorPositionChanged` for the same keystroke.
+- Ordered-list renumbering is scoped to the local ordered-list run around the edited block,
+  not a mandatory full-document renumber.
+
+## 9. Edge Cases Required By This Spec
 
 - `\begin{align*}` environment parsing and autocomplete.
 - setext heading updates when underline is typed after heading text.
@@ -162,7 +183,7 @@ To avoid stale formatting and crashes:
 - standalone `===` marker visibility and H2 variant marker rendering when paired with heading text.
 - token format ranges staying in bounds for complex markdown samples.
 
-## 9. Test Matrix
+## 10. Test Matrix
 
 Primary files:
 
@@ -180,7 +201,7 @@ Coverage includes:
 - inline extension tokenization and malformed syntax rejection
 - highlighting correctness and format safety bounds
 
-## 10. Validation Commands
+## 11. Validation Commands
 
 ```bash
 cmake -S . -B build

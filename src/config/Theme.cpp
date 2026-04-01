@@ -4,6 +4,10 @@
 #include "Theme.h"
 #include "util/TomlParser.h"
 
+#include <QCoreApplication>
+#include <QDir>
+#include <QFile>
+
 Theme Theme::darkDefault()
 {
     Theme t;
@@ -53,6 +57,30 @@ Theme Theme::darkDefault()
     t.latexEnvNameFg   = QColor("#69db7c");
 
     return t;
+}
+
+Theme Theme::resolveByName(const QString &themeName)
+{
+    Theme theme = Theme::darkDefault();
+    const QString appDir = QCoreApplication::applicationDirPath();
+    const QString themeFile = themeName + ".toml";
+    const QStringList themeCandidates = {
+        QDir::current().filePath("themes/" + themeFile),
+        appDir + "/themes/" + themeFile,
+        appDir + "/../themes/" + themeFile,
+        appDir + "/../share/miter/themes/" + themeFile,
+        appDir + "/../Resources/themes/" + themeFile,
+        QString(":/themes/%1").arg(themeFile)
+    };
+
+    for (const QString &path : themeCandidates) {
+        if (QFile::exists(path)) {
+            theme = Theme::fromToml(path);
+            break;
+        }
+    }
+
+    return theme;
 }
 
 Theme Theme::fromToml(const QString &path)

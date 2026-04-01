@@ -25,6 +25,14 @@ It focuses on fast typing, stable highlighting, and predictable editing behavior
 - Task list checkbox marker highlighting (`[ ]`, `[x]`, `[X]`).
 - Blockquote styling with a distinct gray background and quote-border color.
 - White theme readability tuning with deeper neutral-gray token colors.
+- Shared parser/editor continuation rules (lists and blockquotes) to keep typing behavior and highlighting consistent.
+
+## Performance Notes
+
+- Focus mode dims only visible viewport lines (avoids O(n) extra-selections on every cursor move).
+- Enter auto-close for `$$` and fenced blocks reuses highlighter context state when available.
+- Word/char stats are debounced to reduce per-keystroke CPU wakeups in long writing sessions.
+- Ordered-list renumbering is localized to nearby list runs instead of scanning the full document.
 
 ## Autocomplete Behavior
 
@@ -45,6 +53,7 @@ It focuses on fast typing, stable highlighting, and predictable editing behavior
 - Enter line continuation:
 	- list continuation for ordered/unordered/task items
 	- blockquote continuation with preserved indentation and quote depth
+	- continuation matching is shared with `BlockParser` line parsers
 - Horizontal-rule safety:
 	- `***`, `- - -`, and `* * *` are not treated as lists on Enter.
 - Setext heading underline variants:

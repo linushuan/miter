@@ -305,7 +305,31 @@ void MainWindow::onOpenFile()
 void MainWindow::onSave()
 {
     auto *editor = tabManager_->currentEditor();
-    if (editor) editor->saveInteractive(this);
+    if (!editor) {
+        return;
+    }
+
+    const bool hadPathBeforeSave = !editor->filePath().isEmpty();
+    if (editor->saveInteractive(this)) {
+        const QString savedPath = editor->filePath();
+        if (!savedPath.isEmpty()) {
+            statusBar_->showMessage(QString("Saved %1").arg(QFileInfo(savedPath).fileName()), 3000);
+        }
+        return;
+    }
+
+    // For untitled documents, false may simply mean Save As was cancelled.
+    if (!hadPathBeforeSave) {
+        return;
+    }
+
+    const QString path = editor->filePath();
+    const QString label = path.isEmpty() ? QString("current file") : QFileInfo(path).fileName();
+    statusBar_->showMessage(QString("Failed to save %1").arg(label), 5000);
+    QMessageBox::warning(this,
+                         "Save Failed",
+                         QString("Could not save %1.\nPlease check file permissions or disk space.")
+                             .arg(label));
 }
 
 void MainWindow::onSaveAs()

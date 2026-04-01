@@ -42,7 +42,7 @@ public:
     int  size() const;
     void clear();
 
-    // Serialization for QTextBlockUserData
+    // Serialization helper kept for tests and potential persistence features.
     QByteArray          serialize() const;
     static ContextStack deserialize(const QByteArray &data);
 

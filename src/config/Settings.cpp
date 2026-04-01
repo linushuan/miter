@@ -17,6 +17,17 @@ QString Settings::configPath()
     return configDir + "/config.toml";
 }
 
+int Settings::normalizedTabSize(int tabSize)
+{
+    if (tabSize < 1) {
+        return 1;
+    }
+    if (tabSize > 16) {
+        return 16;
+    }
+    return tabSize;
+}
+
 Settings Settings::load()
 {
     Settings s;
@@ -34,9 +45,7 @@ Settings Settings::load()
     s.autoSave      = toml.getBool("editor", "auto_save", s.autoSave);
     s.autoSaveInterval = toml.getInt("editor", "auto_save_interval", s.autoSaveInterval);
     s.showHardBreak = toml.getBool("editor", "show_hard_break", s.showHardBreak);
-    s.tabSize       = toml.getInt("editor", "tab_size", s.tabSize);
-    if (s.tabSize < 1) s.tabSize = 1;
-    if (s.tabSize > 16) s.tabSize = 16;
+    s.tabSize       = normalizedTabSize(toml.getInt("editor", "tab_size", s.tabSize));
 
     s.restoreSession = toml.getBool("session", "restore", s.restoreSession);
 
@@ -67,7 +76,7 @@ void Settings::save() const
     out << "auto_save = " << (autoSave ? "true" : "false") << "\n";
     out << "auto_save_interval = " << autoSaveInterval << "\n";
     out << "show_hard_break = " << (showHardBreak ? "true" : "false") << "\n";
-    const int safeTabSize = (tabSize < 1) ? 1 : ((tabSize > 16) ? 16 : tabSize);
+    const int safeTabSize = normalizedTabSize(tabSize);
     out << "tab_size = " << safeTabSize << "\n\n";
 
     out << "[session]\n";

@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 linushuan
 
 #include "ContextStack.h"
+
 #include <QDataStream>
 #include <QIODevice>
 

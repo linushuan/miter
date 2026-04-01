@@ -10,6 +10,8 @@
 class LineNumberArea;
 class MdHighlighter;
 class QInputMethodEvent;
+class QTextBlock;
+class QTimer;
 
 class MdEditor : public QPlainTextEdit {
     Q_OBJECT
@@ -72,9 +74,14 @@ private:
     QColor          currentLineBg_ = QColor("#2a2a3e");
     QColor          lineNumberFg_ = QColor("#585b70");
     QColor          lineNumberBg_ = QColor("#1e1e2e");
+    QTimer         *statusStatsTimer_ = nullptr;
 
+    bool handleAutoCloseKey(QKeyEvent *event);
+    bool handleTabKey(QKeyEvent *event);
+    bool handleEnterKey(QKeyEvent *event);
     bool handleListIndentationKey(bool indentForward);
-    void renumberOrderedLists();
+    void renumberOrderedListsAroundBlock(const QTextBlock &anchorBlock);
+    void renumberOrderedListRange(const QTextBlock &startBlock, const QTextBlock &endBlock);
     void restoreCursorInBlock(int blockNumber, int column);
     void applyEditorFont(const QString &family, int pointSize);
 
@@ -82,4 +89,6 @@ private:
     void updateLineNumberArea(const QRect &rect, int dy);
     void highlightCurrentLine();
     void updateStatusStats();
+    void recomputeWordCountStats();
+    void emitWordCountIfChanged();
 };

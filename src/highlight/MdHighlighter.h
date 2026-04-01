@@ -11,6 +11,8 @@
 #include "parser/ContextStack.h"
 #include "config/Theme.h"
 
+class QTextBlock;
+
 class MdHighlighter : public QSyntaxHighlighter {
     Q_OBJECT
 public:
@@ -18,6 +20,9 @@ public:
     void setTheme(const Theme &theme);
     void setEnabled(bool enabled);
     void setBaseFontSize(int pointSize);
+
+    bool blockStartsInsideLatexDisplay(const QTextBlock &block, bool *known = nullptr) const;
+    bool blockStartsInsideCodeFence(const QTextBlock &block, bool *known = nullptr) const;
 
 protected:
     void highlightBlock(const QString &text) override;
@@ -33,6 +38,7 @@ private:
 
     ContextStack restoreContext() const;
     void         saveContext(const ContextStack &ctx);
+    bool         blockStartsInsideState(const QTextBlock &block, BlockState state, bool *known = nullptr) const;
 
     void buildFormats();
 

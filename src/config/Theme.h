@@ -48,6 +48,7 @@ struct Theme {
     QColor latexMathBodyFg;
     QColor latexEnvNameFg;
 
+    static Theme resolveByName(const QString &themeName);
     static Theme fromToml(const QString &path);
     static Theme darkDefault();
 };
