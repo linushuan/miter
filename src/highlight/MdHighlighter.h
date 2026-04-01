@@ -39,5 +39,7 @@ private:
     Theme theme_;
     QHash<TokenType, QTextCharFormat> formats_;
     bool enabled_ = true;
+    bool setextSyncInProgress_ = false;
+    bool setextRefreshPending_ = false;
     int baseFontSize_ = 14;
 };

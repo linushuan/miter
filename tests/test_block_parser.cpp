@@ -109,6 +109,7 @@ private slots:
         QCOMPARE(BlockParser::classify("***", ctx, tokens), BlockType::HR);
         QCOMPARE(BlockParser::classify("___", ctx, tokens), BlockType::HR);
         QCOMPARE(BlockParser::classify("- - -", ctx, tokens), BlockType::HR);
+        QCOMPARE(BlockParser::classify("* * *", ctx, tokens), BlockType::HR);
     }
 
     void testTable()
@@ -270,11 +271,30 @@ private slots:
     {
         QVERIFY(BlockParser::isSetextH1Underline("==="));
         QVERIFY(BlockParser::isSetextH1Underline("========"));
+        QVERIFY(BlockParser::isSetextH1Underline("   ===="));
         QVERIFY(!BlockParser::isSetextH1Underline("=="));
 
         QVERIFY(BlockParser::isSetextH2Underline("---"));
         QVERIFY(BlockParser::isSetextH2Underline("--------"));
+        QVERIFY(BlockParser::isSetextH2Underline("   -----"));
         QVERIFY(!BlockParser::isSetextH2Underline("--"));
+    }
+
+    void testListItemCheckboxToken()
+    {
+        ContextStack ctx;
+        QVector<BlockToken> tokens;
+
+        QCOMPARE(BlockParser::classify("- [x] done", ctx, tokens), BlockType::ListItem);
+
+        bool hasCheckbox = false;
+        for (const auto &token : tokens) {
+            if (token.type == TokenType::CheckboxMarker) {
+                hasCheckbox = true;
+                break;
+            }
+        }
+        QVERIFY(hasCheckbox);
     }
 
     void testIndentedCodeNotFence()

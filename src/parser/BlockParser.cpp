@@ -4,6 +4,24 @@
 #include "BlockParser.h"
 #include <QRegularExpression>
 
+namespace {
+bool matchTaskCheckboxPrefix(const QString &text, int *start = nullptr, int *length = nullptr)
+{
+    static QRegularExpression re(R"(^(\s*)(\[[ xX]\])(?=\s|$))");
+    const auto m = re.match(text);
+    if (!m.hasMatch()) {
+        return false;
+    }
+    if (start) {
+        *start = m.capturedStart(2);
+    }
+    if (length) {
+        *length = m.capturedLength(2);
+    }
+    return true;
+}
+}
+
 BlockType BlockParser::classify(const QString &text, ContextStack &ctx, QVector<BlockToken> &tokens)
 {
     tokens.clear();
@@ -289,6 +307,13 @@ BlockType BlockParser::classify(const QString &text, ContextStack &ctx, QVector<
     if (prefix.hasList) {
         appendContainerMarkers(prefix);
         tokens.append({contentOffset, textLen - contentOffset, TokenType::ListBody});
+
+        int checkboxStart = 0;
+        int checkboxLen = 0;
+        if (matchTaskCheckboxPrefix(content, &checkboxStart, &checkboxLen) && checkboxLen > 0) {
+            tokens.append({contentOffset + checkboxStart, checkboxLen, TokenType::CheckboxMarker});
+        }
+
         return BlockType::ListItem;
     }
 
@@ -304,13 +329,13 @@ BlockType BlockParser::classify(const QString &text, ContextStack &ctx, QVector<
 
 bool BlockParser::isSetextH1Underline(const QString &nextLine)
 {
-    static QRegularExpression re(R"(^={3,}\s*$)");
+    static QRegularExpression re(R"(^ {0,3}={3,}\s*$)");
     return re.match(nextLine).hasMatch();
 }
 
 bool BlockParser::isSetextH2Underline(const QString &nextLine)
 {
-    static QRegularExpression re(R"(^-{3,}\s*$)");
+    static QRegularExpression re(R"(^ {0,3}-{3,}\s*$)");
     return re.match(nextLine).hasMatch();
 }
 

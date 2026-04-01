@@ -47,9 +47,6 @@ miter
 .DS_Store
 Thumbs.db
 
-# docs
-spec.md
-
 # Local install/test artifacts
 .cache/
 dist/

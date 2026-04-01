@@ -9,6 +9,7 @@
 #include <QTextBlock>
 #include <QTextBlockUserData>
 #include <QRegularExpression>
+#include <QMetaObject>
 
 // Store ContextStack in QTextBlockUserData
 class ContextBlockData : public QTextBlockUserData {
@@ -62,6 +63,26 @@ void MdHighlighter::highlightBlock(const QString &text)
 
     // 1. Restore context from previous block
     ContextStack ctx = restoreContext();
+
+    // Setext headings depend on the next line. Queue a single full refresh
+    // on potential underline edits to avoid reentrant highlighting crashes.
+    if (!setextSyncInProgress_ && !setextRefreshPending_ && ctx.topState() == BlockState::Normal) {
+        const QString trimmed = text.trimmed();
+        const bool maybeSetextRelated =
+            trimmed.isEmpty() ||
+            trimmed.startsWith(QLatin1Char('-')) ||
+            trimmed.startsWith(QLatin1Char('='));
+
+        if (maybeSetextRelated) {
+            setextRefreshPending_ = true;
+            QMetaObject::invokeMethod(this, [this]() {
+                setextSyncInProgress_ = true;
+                rehighlight();
+                setextSyncInProgress_ = false;
+                setextRefreshPending_ = false;
+            }, Qt::QueuedConnection);
+        }
+    }
 
     // Check for setext heading (lookahead)
     bool isSetextH1 = false, isSetextH2 = false;
@@ -283,8 +304,10 @@ void MdHighlighter::buildFormats()
     formats_[TokenType::InlineCodeMark] = makeFormat(theme_.markerFg);
 
     // Blockquote
-    formats_[TokenType::BlockquoteMark] = makeFormat(theme_.blockquoteBorderFg);
-    formats_[TokenType::BlockquoteBody] = makeFormat(theme_.blockquoteFg);
+    QColor blockquoteBg = theme_.lineNumberBg;
+    blockquoteBg.setAlpha(84);
+    formats_[TokenType::BlockquoteMark] = makeFormat(theme_.blockquoteBorderFg, false, false, blockquoteBg);
+    formats_[TokenType::BlockquoteBody] = makeFormat(theme_.blockquoteFg, false, false, blockquoteBg);
 
     // List
     formats_[TokenType::ListBullet] = makeFormat(theme_.listBulletFg, true);
@@ -317,7 +340,31 @@ void MdHighlighter::buildFormats()
     formats_[TokenType::ItalicMarker]  = makeFormat(theme_.markerFg, false, true);
     formats_[TokenType::BoldItalic]    = makeFormat(theme_.boldFg, true, true);
     formats_[TokenType::BoldItalicMarker] = makeFormat(theme_.markerFg, true, true);
-    formats_[TokenType::Strikethrough] = makeFormat(theme_.strikeFg);
+
+    QTextCharFormat underlineFmt = makeFormat(theme_.foreground);
+    underlineFmt.setFontUnderline(true);
+    formats_[TokenType::Underline] = underlineFmt;
+    formats_[TokenType::UnderlineMarker] = makeFormat(theme_.markerFg, true);
+
+    QTextCharFormat highlightFmt = makeFormat(theme_.foreground, false, false, theme_.searchHighlightBg);
+    formats_[TokenType::Highlight] = highlightFmt;
+    formats_[TokenType::HighlightMarker] = makeFormat(theme_.markerFg, true);
+
+    QTextCharFormat superscriptFmt = makeFormat(theme_.foreground);
+    superscriptFmt.setVerticalAlignment(QTextCharFormat::AlignSuperScript);
+    superscriptFmt.setFontPointSize(baseSize * 0.85);
+    formats_[TokenType::Superscript] = superscriptFmt;
+    formats_[TokenType::SuperscriptMarker] = makeFormat(theme_.markerFg);
+
+    QTextCharFormat subscriptFmt = makeFormat(theme_.foreground);
+    subscriptFmt.setVerticalAlignment(QTextCharFormat::AlignSubScript);
+    subscriptFmt.setFontPointSize(baseSize * 0.85);
+    formats_[TokenType::Subscript] = subscriptFmt;
+    formats_[TokenType::SubscriptMarker] = makeFormat(theme_.markerFg);
+
+    QTextCharFormat strikeFmt = makeFormat(theme_.strikeFg);
+    strikeFmt.setFontStrikeOut(true);
+    formats_[TokenType::Strikethrough] = strikeFmt;
     formats_[TokenType::StrikeMarker]  = makeFormat(theme_.markerFg);
 
     formats_[TokenType::LinkText]    = makeFormat(theme_.linkTextFg);
@@ -326,6 +373,7 @@ void MdHighlighter::buildFormats()
     formats_[TokenType::ImageAlt]    = makeFormat(theme_.imageFg);
     formats_[TokenType::ImageUrl]    = makeFormat(theme_.linkUrlFg);
     formats_[TokenType::ImageBracket] = makeFormat(theme_.imageFg, true);
+    formats_[TokenType::CheckboxMarker] = makeFormat(theme_.listBulletFg, true);
     formats_[TokenType::HtmlComment] = makeFormat(theme_.lineNumberFg, false, true);
 
     formats_[TokenType::HardBreakSpace]     = makeFormat(theme_.hardBreakFg);

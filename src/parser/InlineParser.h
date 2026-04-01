@@ -35,9 +35,14 @@ private:
     static bool tryInlineCode(State &s);
     static bool tryHtmlComment(State &s);
     static bool tryInlineLatex(State &s);
+    static bool tryAngleAutoLink(State &s);
+    static bool tryLinkedImageLink(State &s);
     static bool tryImage(State &s);
     static bool tryLink(State &s);
+    static bool tryUnderline(State &s);
+    static bool tryHighlight(State &s);
     static bool tryBoldItalic(State &s);
+    static bool trySuperscriptOrSubscript(State &s);
     static bool tryStrikethrough(State &s);
     static bool tryHardBreak(State &s);
 

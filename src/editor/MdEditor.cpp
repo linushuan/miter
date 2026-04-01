@@ -193,6 +193,174 @@ bool hasSameTypeListContextBefore(const QTextBlock &block, bool ordered, int ind
 
     return prevIndent == indent;
 }
+
+bool hasNonSpaceTextAfterCursorInBlock(const QTextCursor &cursor)
+{
+    const QString line = cursor.block().text();
+    const int start = cursor.positionInBlock();
+    for (int i = start; i < line.size(); ++i) {
+        if (!line[i].isSpace()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool shouldAutoClosePair(const QTextCursor &cursor, QChar opener)
+{
+    if (cursor.hasSelection()) {
+        return false;
+    }
+    if (hasNonSpaceTextAfterCursorInBlock(cursor)) {
+        return false;
+    }
+
+    // Keep ``` input natural: after typing `` and moving over the closer,
+    // a third ` should stay literal.
+    if (opener == QLatin1Char('`')) {
+        const QString line = cursor.block().text();
+        const int pos = cursor.positionInBlock();
+        if (pos > 0 && line[pos - 1] == QLatin1Char('`')) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool matchBlockquoteLine(const QString &line,
+                        QString *prefix = nullptr,
+                        QString *content = nullptr)
+{
+    static const QRegularExpression re(R"(^(\s*(?:> ?)+)(.*)$)");
+    const auto m = re.match(line);
+    if (!m.hasMatch()) {
+        return false;
+    }
+
+    if (prefix) {
+        *prefix = m.captured(1);
+    }
+    if (content) {
+        *content = m.captured(2);
+    }
+    return true;
+}
+
+bool isStandaloneLatexDisplayFenceLine(const QString &line)
+{
+    return line.trimmed() == QLatin1String("$$");
+}
+
+bool isCodeFenceStartLine(const QString &line)
+{
+    const QString trimmed = line.trimmed();
+    return trimmed.startsWith(QLatin1String("```"));
+}
+
+bool isHorizontalRuleLine(const QString &line)
+{
+    static const QRegularExpression re(R"(^\s{0,3}([-*_])(\s*\1){2,}\s*$)");
+    return re.match(line).hasMatch();
+}
+
+bool matchLatexBeginEnvLine(const QString &line, QString *linePrefix = nullptr, QString *envName = nullptr)
+{
+    static const QRegularExpression re(R"(^\s*(?:> ?)*\\begin\{([^}\s]+)\}\s*$)");
+    const auto m = re.match(line);
+    if (!m.hasMatch()) {
+        return false;
+    }
+
+    const int beginStart = line.indexOf(QStringLiteral("\\begin{"));
+    if (beginStart < 0) {
+        return false;
+    }
+
+    if (linePrefix) {
+        *linePrefix = line.left(beginStart);
+    }
+    if (envName) {
+        *envName = m.captured(1);
+    }
+    return true;
+}
+
+bool hasImmediateAutoClosedBlock(const QTextBlock &openBlock, const QString &closingLine)
+{
+    QTextBlock next = openBlock.next();
+    if (!next.isValid()) {
+        return false;
+    }
+
+    if (next.text().trimmed() == closingLine.trimmed()) {
+        return true;
+    }
+
+    if (next.text().trimmed().isEmpty()) {
+        const QTextBlock nextNext = next.next();
+        if (nextNext.isValid() && nextNext.text().trimmed() == closingLine.trimmed()) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool isInsideStandaloneLatexDisplayBefore(const QTextDocument *doc, const QTextBlock &untilBlock)
+{
+    bool inDisplay = false;
+    for (QTextBlock block = doc->begin(); block.isValid() && block != untilBlock; block = block.next()) {
+        if (isStandaloneLatexDisplayFenceLine(block.text())) {
+            inDisplay = !inDisplay;
+        }
+    }
+    return inDisplay;
+}
+
+bool isInsideBacktickFenceBefore(const QTextDocument *doc, const QTextBlock &untilBlock)
+{
+    bool inFence = false;
+    for (QTextBlock block = doc->begin(); block.isValid() && block != untilBlock; block = block.next()) {
+        if (isCodeFenceStartLine(block.text())) {
+            inFence = !inFence;
+        }
+    }
+    return inFence;
+}
+
+void insertMultilineClosingFence(QPlainTextEdit *editor,
+                                 const QString &currentLine,
+                                 const QString &closingFence)
+{
+    QTextCursor cursor = editor->textCursor();
+    const QString leadingSpaces(leadingSpaceCount(currentLine), QLatin1Char(' '));
+
+    cursor.beginEditBlock();
+    cursor.insertText(QString("\n%1\n%2")
+        .arg(leadingSpaces, leadingSpaces + closingFence));
+    cursor.movePosition(QTextCursor::Up);
+    cursor.movePosition(QTextCursor::EndOfLine);
+    cursor.endEditBlock();
+
+    editor->setTextCursor(cursor);
+}
+
+void insertMultilineAutoClosedBlock(QPlainTextEdit *editor,
+                                    const QString &middleLinePrefix,
+                                    const QString &closingLine)
+{
+    QTextCursor cursor = editor->textCursor();
+
+    cursor.beginEditBlock();
+    cursor.insertText(QString("\n%1\n%2")
+        .arg(middleLinePrefix, closingLine));
+    cursor.movePosition(QTextCursor::Up);
+    cursor.movePosition(QTextCursor::EndOfLine);
+    cursor.endEditBlock();
+
+    editor->setTextCursor(cursor);
+}
 }
 
 MdEditor::MdEditor(QWidget *parent)
@@ -367,6 +535,66 @@ void MdEditor::resizeEvent(QResizeEvent *event)
 
 void MdEditor::keyPressEvent(QKeyEvent *event)
 {
+    const Qt::KeyboardModifiers mods = event->modifiers();
+    const bool hasCommandModifier = (mods & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier));
+    if (!hasCommandModifier) {
+        const QString input = event->text();
+        if (input.size() == 1) {
+            QTextCursor cursor = textCursor();
+            const QString line = cursor.block().text();
+            const int pos = cursor.positionInBlock();
+            const QChar typed = input[0];
+
+            auto skipExistingCloser = [&](QChar closer) {
+                if (pos < line.size() && line[pos] == closer) {
+                    QTextCursor moved = cursor;
+                    moved.movePosition(QTextCursor::Right);
+                    setTextCursor(moved);
+                    return true;
+                }
+                return false;
+            };
+
+            if (typed == QLatin1Char(')') ||
+                typed == QLatin1Char(']') ||
+                typed == QLatin1Char('}') ||
+                typed == QLatin1Char('>') ||
+                typed == QLatin1Char('$') ||
+                typed == QLatin1Char('`')) {
+                if (skipExistingCloser(typed)) {
+                    return;
+                }
+            }
+
+            QChar closer;
+            bool supportsAutoClose = true;
+            if (typed == QLatin1Char('(')) {
+                closer = QLatin1Char(')');
+            } else if (typed == QLatin1Char('[')) {
+                closer = QLatin1Char(']');
+            } else if (typed == QLatin1Char('{')) {
+                closer = QLatin1Char('}');
+            } else if (typed == QLatin1Char('<')) {
+                closer = QLatin1Char('>');
+            } else if (typed == QLatin1Char('$')) {
+                closer = QLatin1Char('$');
+            } else if (typed == QLatin1Char('`')) {
+                closer = QLatin1Char('`');
+            } else {
+                supportsAutoClose = false;
+            }
+
+            if (supportsAutoClose && shouldAutoClosePair(cursor, typed)) {
+                cursor.beginEditBlock();
+                cursor.insertText(QString(typed) + QString(closer));
+                cursor.movePosition(QTextCursor::Left);
+                cursor.endEditBlock();
+                setTextCursor(cursor);
+                return;
+            }
+        }
+    }
+
     if (event->key() == Qt::Key_Tab || event->key() == Qt::Key_Backtab) {
         const bool indentForward = (event->key() == Qt::Key_Tab);
 
@@ -385,6 +613,34 @@ void MdEditor::keyPressEvent(QKeyEvent *event)
         const bool shiftEnter = event->modifiers().testFlag(Qt::ShiftModifier);
         QTextCursor cursor = textCursor();
         QString currentLine = cursor.block().text();
+
+        if (!shiftEnter && cursor.positionInBlock() == currentLine.size()) {
+            QString latexPrefix;
+            QString latexEnv;
+            if (matchLatexBeginEnvLine(currentLine, &latexPrefix, &latexEnv)) {
+                const QString closingLine = latexPrefix + QStringLiteral("\\end{%1}").arg(latexEnv);
+                if (!hasImmediateAutoClosedBlock(cursor.block(), closingLine)) {
+                    insertMultilineAutoClosedBlock(this, latexPrefix, closingLine);
+                    return;
+                }
+            }
+
+            const QString leadingSpaces(leadingSpaceCount(currentLine), QLatin1Char(' '));
+            if (isStandaloneLatexDisplayFenceLine(currentLine) &&
+                !isInsideStandaloneLatexDisplayBefore(document(), cursor.block()) &&
+                !hasImmediateAutoClosedBlock(cursor.block(), leadingSpaces + QStringLiteral("$$"))) {
+                insertMultilineClosingFence(this, currentLine, QStringLiteral("$$"));
+                return;
+            }
+
+            if (isCodeFenceStartLine(currentLine) &&
+                !isInsideBacktickFenceBefore(document(), cursor.block()) &&
+                !hasImmediateAutoClosedBlock(cursor.block(), leadingSpaces + QStringLiteral("```"))) {
+                insertMultilineClosingFence(this, currentLine, QStringLiteral("```"));
+                return;
+            }
+        }
+
         int orderedIndent = 0;
         int orderedNumber = 0;
         QString orderedDelimiter;
@@ -408,7 +664,7 @@ void MdEditor::keyPressEvent(QKeyEvent *event)
         QString unorderedCheckbox;
         QString unorderedContent;
         int unorderedContentStart = 0;
-        const bool unordered = !ordered && matchUnorderedListLine(
+        const bool unorderedCandidate = !ordered && matchUnorderedListLine(
             currentLine,
             &unorderedIndent,
             &unorderedMarker,
@@ -416,8 +672,18 @@ void MdEditor::keyPressEvent(QKeyEvent *event)
             &unorderedContent,
             &unorderedContentStart
         );
+        const bool unordered = unorderedCandidate && !isHorizontalRuleLine(currentLine);
 
         const int paragraphIndent = leadingSpaceCount(currentLine);
+
+        QString blockquotePrefix;
+        QString blockquoteContent;
+        const bool blockquote = !ordered && !unordered && matchBlockquoteLine(
+            currentLine,
+            &blockquotePrefix,
+            &blockquoteContent
+        );
+
         const bool emptyListItem = (ordered && orderedContent.trimmed().isEmpty())
             || (unordered && unorderedContent.trimmed().isEmpty());
 
@@ -425,7 +691,6 @@ void MdEditor::keyPressEvent(QKeyEvent *event)
             if (!emptyListItem) {
                 return false;
             }
-
             int startInBlock = 0;
             int endInBlock = 0;
             if (ordered) {
@@ -500,6 +765,14 @@ void MdEditor::keyPressEvent(QKeyEvent *event)
                 .arg(leading)
                 .arg(bullet)
                 .arg(checkbox));
+            return;
+        }
+
+        if (blockquote) {
+            if (!blockquotePrefix.endsWith(QLatin1Char(' '))) {
+                blockquotePrefix += QLatin1Char(' ');
+            }
+            insertPlainText(blockquotePrefix);
             return;
         }
 

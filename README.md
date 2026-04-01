@@ -7,10 +7,23 @@ It focuses on fast typing, syntax highlighting, and clean reading while editing.
 
 - Edit Markdown with multi-tab workflow.
 - Highlight Markdown, HTML-style comments, code fences, tables, links/images, and LaTeX.
+- Highlight extended inline syntax: `++underline++`, `==highlight==`, superscript `^text^`, subscript `~text~`.
+- Highlight linked-image syntax: `[![alt](image-url)](link-url)`.
+- Highlight angle autolinks: `<https://example.com>`.
+- Render strikethrough text with strike-out font style.
+- Color task checkbox markers (`[ ]`, `[x]`) in list items.
 - Use dark/white theme toggle from the toolbar.
 - Auto-continue list items on Enter (bullets, numbers, checkboxes).
+- Auto-continue blockquote prefixes with current indentation and depth.
+- Auto-close pairs for `()`, `[]`, `{}`, `<>`, `$`, and backticks, with skip-over behavior when closer already exists.
+- Auto-insert closing blocks for `$$`, triple-backtick code fences (including language-tagged fences), and `\\begin{env}`.
+- Prevent horizontal-rule lines (`***`, `- - -`, `* * *`) from being treated as list items on Enter.
 - Save files with standard keyboard shortcuts.
 - Detect external file changes, mark the tab, and offer to reload on focus.
+
+## Markdown Behavior Spec
+
+Full behavior and edge-case spec is documented in [spec.md](spec.md).
 
 ## Quick Start
 

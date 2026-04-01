@@ -5,6 +5,78 @@
 #include "LatexParser.h"
 #include "util/CjkUtil.h"
 
+namespace {
+int findUnescapedChar(const QString &text, int from, int end, QChar needle)
+{
+    for (int i = from; i < end; ++i) {
+        if (text[i] == QLatin1Char('\\') && i + 1 < end) {
+            ++i;
+            continue;
+        }
+        if (text[i] == needle) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+bool parseImageAt(const QString &text,
+                  int start,
+                  int end,
+                  int &altStart,
+                  int &altEnd,
+                  int &urlStart,
+                  int &urlEnd,
+                  int &imageEnd)
+{
+    if (start + 1 >= end || text[start] != QLatin1Char('!') || text[start + 1] != QLatin1Char('[')) {
+        return false;
+    }
+
+    altStart = start + 2;
+    altEnd = findUnescapedChar(text, altStart, end, QLatin1Char(']'));
+    if (altEnd < 0 || altEnd + 1 >= end || text[altEnd + 1] != QLatin1Char('(')) {
+        return false;
+    }
+
+    urlStart = altEnd + 2;
+    urlEnd = findUnescapedChar(text, urlStart, end, QLatin1Char(')'));
+    if (urlEnd < 0) {
+        return false;
+    }
+
+    imageEnd = urlEnd + 1;
+    return true;
+}
+
+bool isSimpleAutoLinkTarget(const QString &target)
+{
+    if (target.isEmpty()) {
+        return false;
+    }
+
+    for (QChar c : target) {
+        if (c.isSpace()) {
+            return false;
+        }
+    }
+
+    const Qt::CaseSensitivity cs = Qt::CaseInsensitive;
+    if (target.startsWith(QLatin1String("http://"), cs) ||
+        target.startsWith(QLatin1String("https://"), cs) ||
+        target.startsWith(QLatin1String("ftp://"), cs) ||
+        target.startsWith(QLatin1String("mailto:"), cs) ||
+        target.startsWith(QLatin1String("www."), cs)) {
+        return true;
+    }
+
+    // A minimal email-style fallback for angle autolinks.
+    const int at = target.indexOf(QLatin1Char('@'));
+    return at > 0 && at < target.size() - 1;
+}
+
+}
+
 void InlineParser::parse(const QString &text, int offset, const ContextStack &ctx, QVector<InlineToken> &tokens)
 {
     Q_UNUSED(ctx);
@@ -19,9 +91,14 @@ void InlineParser::parse(const QString &text, int offset, const ContextStack &ct
         if (tryInlineCode(s)) continue;
         if (tryHtmlComment(s)) continue;
         if (tryInlineLatex(s)) continue;
+        if (tryAngleAutoLink(s)) continue;
+        if (tryLinkedImageLink(s)) continue;
         if (tryImage(s)) continue;
         if (tryLink(s)) continue;
+        if (tryUnderline(s)) continue;
+        if (tryHighlight(s)) continue;
         if (tryBoldItalic(s)) continue;
+        if (trySuperscriptOrSubscript(s)) continue;
         if (tryStrikethrough(s)) continue;
         if (tryHardBreak(s)) continue;
 
@@ -103,26 +180,79 @@ bool InlineParser::tryInlineLatex(State &s)
     return LatexParser::parseInline(s.text, s.pos, s.tokens);
 }
 
+bool InlineParser::tryAngleAutoLink(State &s)
+{
+    if (s.text[s.pos] != QLatin1Char('<')) return false;
+    if (s.pos + 2 >= s.end) return false;
+
+    const int closePos = s.text.indexOf(QLatin1Char('>'), s.pos + 1);
+    if (closePos < 0) {
+        return false;
+    }
+
+    const QString target = s.text.mid(s.pos + 1, closePos - s.pos - 1);
+    if (!isSimpleAutoLinkTarget(target)) {
+        return false;
+    }
+
+    s.tokens.append({s.pos, 1, TokenType::LinkBracket});
+    s.tokens.append({s.pos + 1, closePos - s.pos - 1, TokenType::LinkUrl});
+    s.tokens.append({closePos, 1, TokenType::LinkBracket});
+    s.pos = closePos + 1;
+    return true;
+}
+
+bool InlineParser::tryLinkedImageLink(State &s)
+{
+    if (s.text[s.pos] != QLatin1Char('[')) return false;
+    if (s.pos + 2 >= s.end || s.text[s.pos + 1] != QLatin1Char('!') || s.text[s.pos + 2] != QLatin1Char('[')) {
+        return false;
+    }
+
+    int altStart = 0;
+    int altEnd = 0;
+    int imageUrlStart = 0;
+    int imageUrlEnd = 0;
+    int imageEnd = 0;
+    if (!parseImageAt(s.text, s.pos + 1, s.end, altStart, altEnd, imageUrlStart, imageUrlEnd, imageEnd)) {
+        return false;
+    }
+
+    if (imageEnd + 1 >= s.end ||
+        s.text[imageEnd] != QLatin1Char(']') ||
+        s.text[imageEnd + 1] != QLatin1Char('(')) {
+        return false;
+    }
+
+    const int outerUrlStart = imageEnd + 2;
+    const int outerUrlEnd = findUnescapedChar(s.text, outerUrlStart, s.end, QLatin1Char(')'));
+    if (outerUrlEnd < 0) {
+        return false;
+    }
+
+    s.tokens.append({s.pos, 1, TokenType::LinkBracket});                 // [
+    s.tokens.append({s.pos + 1, 2, TokenType::ImageBracket});            // ![
+    s.tokens.append({altStart, altEnd - altStart, TokenType::ImageAlt});
+    s.tokens.append({altEnd, 2, TokenType::ImageBracket});               // ](
+    s.tokens.append({imageUrlStart, imageUrlEnd - imageUrlStart, TokenType::ImageUrl});
+    s.tokens.append({imageUrlEnd, 1, TokenType::ImageBracket});          // )
+    s.tokens.append({imageEnd, 2, TokenType::LinkBracket});              // ](
+    s.tokens.append({outerUrlStart, outerUrlEnd - outerUrlStart, TokenType::LinkUrl});
+    s.tokens.append({outerUrlEnd, 1, TokenType::LinkBracket});           // )
+    s.pos = outerUrlEnd + 1;
+    return true;
+}
+
 bool InlineParser::tryImage(State &s)
 {
-    if (s.pos + 1 >= s.end) return false;
-    if (s.text[s.pos] != '!' || s.text[s.pos + 1] != '[') return false;
-
-    // Find ]
-    int altStart = s.pos + 2;
-    int altEnd = -1;
-    for (int i = altStart; i < s.end; ++i) {
-        if (s.text[i] == ']') { altEnd = i; break; }
+    int altStart = 0;
+    int altEnd = 0;
+    int urlStart = 0;
+    int urlEnd = 0;
+    int imageEnd = 0;
+    if (!parseImageAt(s.text, s.pos, s.end, altStart, altEnd, urlStart, urlEnd, imageEnd)) {
+        return false;
     }
-    if (altEnd < 0 || altEnd + 1 >= s.end || s.text[altEnd + 1] != '(') return false;
-
-    // Find )
-    int urlStart = altEnd + 2;
-    int urlEnd = -1;
-    for (int i = urlStart; i < s.end; ++i) {
-        if (s.text[i] == ')') { urlEnd = i; break; }
-    }
-    if (urlEnd < 0) return false;
 
     s.tokens.append({s.pos, 2, TokenType::ImageBracket});           // ![
     s.tokens.append({altStart, altEnd - altStart, TokenType::ImageAlt});
@@ -161,6 +291,66 @@ bool InlineParser::tryLink(State &s)
     s.tokens.append({urlEnd, 1, TokenType::LinkBracket});          // )
     s.pos = urlEnd + 1;
     return true;
+}
+
+bool InlineParser::tryUnderline(State &s)
+{
+    if (s.pos + 4 > s.end) {
+        return false;
+    }
+    if (s.text[s.pos] != QLatin1Char('+') || s.text[s.pos + 1] != QLatin1Char('+')) {
+        return false;
+    }
+
+    const int contentStart = s.pos + 2;
+    if (s.text[contentStart].isSpace()) {
+        return false;
+    }
+
+    for (int i = contentStart; i <= s.end - 2; ++i) {
+        if (s.text[i] == QLatin1Char('+') && s.text[i + 1] == QLatin1Char('+')) {
+            if (i <= contentStart || s.text[i - 1].isSpace()) {
+                continue;
+            }
+            s.tokens.append({s.pos, 2, TokenType::UnderlineMarker});
+            s.tokens.append({contentStart, i - contentStart, TokenType::Underline});
+            s.tokens.append({i, 2, TokenType::UnderlineMarker});
+            s.pos = i + 2;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool InlineParser::tryHighlight(State &s)
+{
+    if (s.pos + 4 > s.end) {
+        return false;
+    }
+    if (s.text[s.pos] != QLatin1Char('=') || s.text[s.pos + 1] != QLatin1Char('=')) {
+        return false;
+    }
+
+    const int contentStart = s.pos + 2;
+    if (s.text[contentStart].isSpace()) {
+        return false;
+    }
+
+    for (int i = contentStart; i <= s.end - 2; ++i) {
+        if (s.text[i] == QLatin1Char('=') && s.text[i + 1] == QLatin1Char('=')) {
+            if (i <= contentStart || s.text[i - 1].isSpace()) {
+                continue;
+            }
+            s.tokens.append({s.pos, 2, TokenType::HighlightMarker});
+            s.tokens.append({contentStart, i - contentStart, TokenType::Highlight});
+            s.tokens.append({i, 2, TokenType::HighlightMarker});
+            s.pos = i + 2;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool InlineParser::tryBoldItalic(State &s)
@@ -230,6 +420,53 @@ bool InlineParser::tryStrikethrough(State &s)
             return true;
         }
     }
+    return false;
+}
+
+bool InlineParser::trySuperscriptOrSubscript(State &s)
+{
+    const QChar marker = s.text[s.pos];
+    if (marker != QLatin1Char('^') && marker != QLatin1Char('~')) {
+        return false;
+    }
+    if (s.pos + 2 >= s.end) {
+        return false;
+    }
+    if (s.text[s.pos + 1].isSpace() || s.text[s.pos + 1] == marker) {
+        return false;
+    }
+
+    const int contentStart = s.pos + 1;
+    for (int i = contentStart; i < s.end; ++i) {
+        if (s.text[i] == QLatin1Char('\\') && i + 1 < s.end) {
+            ++i;
+            continue;
+        }
+
+        if (s.text[i] == marker) {
+            if (i <= contentStart || s.text[i - 1].isSpace()) {
+                return false;
+            }
+
+            TokenType markerType = (marker == QLatin1Char('^'))
+                ? TokenType::SuperscriptMarker
+                : TokenType::SubscriptMarker;
+            TokenType contentType = (marker == QLatin1Char('^'))
+                ? TokenType::Superscript
+                : TokenType::Subscript;
+
+            s.tokens.append({s.pos, 1, markerType});
+            s.tokens.append({contentStart, i - contentStart, contentType});
+            s.tokens.append({i, 1, markerType});
+            s.pos = i + 1;
+            return true;
+        }
+
+        if (s.text[i].isSpace()) {
+            return false;
+        }
+    }
+
     return false;
 }
 

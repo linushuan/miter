@@ -115,6 +115,249 @@ private slots:
         QCOMPARE(editor_->toPlainText(), QString("- first\n"));
     }
 
+    void testParenthesisAutopairAtLineEnd()
+    {
+        editor_->clear();
+
+        QTest::keyClicks(editor_, "(");
+
+        QCOMPARE(editor_->toPlainText(), QString("()"));
+        QCOMPARE(editor_->textCursor().positionInBlock(), 1);
+    }
+
+    void testParenthesisNoAutopairInMiddleOfText()
+    {
+        editor_->setPlainText("ab");
+
+        QTextCursor cursor = editor_->textCursor();
+        cursor.setPosition(1);
+        editor_->setTextCursor(cursor);
+
+        QTest::keyClicks(editor_, "(");
+
+        QCOMPARE(editor_->toPlainText(), QString("a(b"));
+        QCOMPARE(editor_->textCursor().positionInBlock(), 2);
+    }
+
+    void testTypingClosingParenSkipsExistingCloser()
+    {
+        editor_->setPlainText("()");
+
+        QTextCursor cursor = editor_->textCursor();
+        cursor.setPosition(1);
+        editor_->setTextCursor(cursor);
+
+        QTest::keyClicks(editor_, ")");
+
+        QCOMPARE(editor_->toPlainText(), QString("()"));
+        QCOMPARE(editor_->textCursor().positionInBlock(), 2);
+    }
+
+    void testAngleBracketAutopairAndSkipOverCloser()
+    {
+        editor_->clear();
+
+        QTest::keyClicks(editor_, "<");
+        QCOMPARE(editor_->toPlainText(), QString("<>"));
+        QCOMPARE(editor_->textCursor().positionInBlock(), 1);
+
+        QTest::keyClicks(editor_, ">");
+        QCOMPARE(editor_->toPlainText(), QString("<>"));
+        QCOMPARE(editor_->textCursor().positionInBlock(), 2);
+    }
+
+    void testAngleBracketNoAutopairInMiddleOfText()
+    {
+        editor_->setPlainText("ab");
+
+        QTextCursor cursor = editor_->textCursor();
+        cursor.setPosition(1);
+        editor_->setTextCursor(cursor);
+
+        QTest::keyClicks(editor_, "<");
+
+        QCOMPARE(editor_->toPlainText(), QString("a<b"));
+        QCOMPARE(editor_->textCursor().positionInBlock(), 2);
+    }
+
+    void testDollarAutopairAndSkipOverCloser()
+    {
+        editor_->clear();
+
+        QTest::keyClicks(editor_, "$");
+        QCOMPARE(editor_->toPlainText(), QString("$$"));
+        QCOMPARE(editor_->textCursor().positionInBlock(), 1);
+
+        QTest::keyClicks(editor_, "$");
+        QCOMPARE(editor_->toPlainText(), QString("$$"));
+        QCOMPARE(editor_->textCursor().positionInBlock(), 2);
+    }
+
+    void testBacktickAutopairAndTripleBacktickInput()
+    {
+        editor_->clear();
+
+        QTest::keyClicks(editor_, "`");
+        QCOMPARE(editor_->toPlainText(), QString("``"));
+        QCOMPARE(editor_->textCursor().positionInBlock(), 1);
+
+        QTest::keyClicks(editor_, "`");
+        QCOMPARE(editor_->toPlainText(), QString("``"));
+        QCOMPARE(editor_->textCursor().positionInBlock(), 2);
+
+        QTest::keyClicks(editor_, "`");
+        QCOMPARE(editor_->toPlainText(), QString("```"));
+        QCOMPARE(editor_->textCursor().positionInBlock(), 3);
+    }
+
+    void testLatexFenceEnterCreatesClosingFence()
+    {
+        editor_->setPlainText("$$");
+
+        QTextCursor cursor = editor_->textCursor();
+        cursor.movePosition(QTextCursor::End);
+        editor_->setTextCursor(cursor);
+
+        QTest::keyClick(editor_, Qt::Key_Return);
+
+        QCOMPARE(editor_->toPlainText(), QString("$$\n\n$$"));
+        QCOMPARE(editor_->textCursor().blockNumber(), 1);
+        QCOMPARE(editor_->textCursor().positionInBlock(), 0);
+    }
+
+    void testCodeFenceEnterCreatesClosingFenceWithLanguage()
+    {
+        editor_->setPlainText("```python");
+
+        QTextCursor cursor = editor_->textCursor();
+        cursor.movePosition(QTextCursor::End);
+        editor_->setTextCursor(cursor);
+
+        QTest::keyClick(editor_, Qt::Key_Return);
+
+        QCOMPARE(editor_->toPlainText(), QString("```python\n\n```"));
+        QCOMPARE(editor_->textCursor().blockNumber(), 1);
+        QCOMPARE(editor_->textCursor().positionInBlock(), 0);
+    }
+
+    void testLatexBeginEnvEnterCreatesClosingLine()
+    {
+        editor_->setPlainText("\\begin{equation}");
+
+        QTextCursor cursor = editor_->textCursor();
+        cursor.movePosition(QTextCursor::End);
+        editor_->setTextCursor(cursor);
+
+        QTest::keyClick(editor_, Qt::Key_Return);
+
+        QCOMPARE(editor_->toPlainText(), QString("\\begin{equation}\n\n\\end{equation}"));
+        QCOMPARE(editor_->textCursor().blockNumber(), 1);
+        QCOMPARE(editor_->textCursor().positionInBlock(), 0);
+    }
+
+    void testLatexBeginEnvInBlockquoteKeepsPrefix()
+    {
+        editor_->setPlainText("> \\begin{align}");
+
+        QTextCursor cursor = editor_->textCursor();
+        cursor.movePosition(QTextCursor::End);
+        editor_->setTextCursor(cursor);
+
+        QTest::keyClick(editor_, Qt::Key_Return);
+
+        QCOMPARE(editor_->toPlainText(), QString("> \\begin{align}\n> \n> \\end{align}"));
+        QCOMPARE(editor_->textCursor().blockNumber(), 1);
+        QCOMPARE(editor_->textCursor().positionInBlock(), 2);
+    }
+
+    void testEnterOnClosingCodeFenceDoesNotDuplicateFence()
+    {
+        editor_->setPlainText("```python\nline\n```");
+
+        QTextBlock closing = editor_->document()->findBlockByNumber(2);
+        QTextCursor cursor(editor_->document());
+        cursor.setPosition(closing.position() + qMax(0, closing.length() - 1));
+        editor_->setTextCursor(cursor);
+
+        QTest::keyClick(editor_, Qt::Key_Return);
+
+        QCOMPARE(editor_->toPlainText(), QString("```python\nline\n```\n"));
+        QCOMPARE(editor_->textCursor().blockNumber(), 3);
+        QCOMPARE(editor_->textCursor().positionInBlock(), 0);
+    }
+
+    void testEnterOnClosingLatexFenceDoesNotDuplicateFence()
+    {
+        editor_->setPlainText("$$\nline\n$$");
+
+        QTextBlock closing = editor_->document()->findBlockByNumber(2);
+        QTextCursor cursor(editor_->document());
+        cursor.setPosition(closing.position() + qMax(0, closing.length() - 1));
+        editor_->setTextCursor(cursor);
+
+        QTest::keyClick(editor_, Qt::Key_Return);
+
+        QCOMPARE(editor_->toPlainText(), QString("$$\nline\n$$\n"));
+        QCOMPARE(editor_->textCursor().blockNumber(), 3);
+        QCOMPARE(editor_->textCursor().positionInBlock(), 0);
+    }
+
+    void testBlockquoteEnterAutocompletesPrefix()
+    {
+        editor_->setPlainText("> quote");
+
+        QTextCursor cursor = editor_->textCursor();
+        cursor.movePosition(QTextCursor::End);
+        editor_->setTextCursor(cursor);
+
+        QTest::keyClick(editor_, Qt::Key_Return);
+
+        QCOMPARE(editor_->toPlainText(), QString("> quote\n> "));
+        QCOMPARE(editor_->textCursor().blockNumber(), 1);
+        QCOMPARE(editor_->textCursor().positionInBlock(), 2);
+    }
+
+    void testBlockquoteEnterKeepsCurrentIndentAndDepth()
+    {
+        editor_->setPlainText("   > > deep quote");
+
+        QTextCursor cursor = editor_->textCursor();
+        cursor.movePosition(QTextCursor::End);
+        editor_->setTextCursor(cursor);
+
+        QTest::keyClick(editor_, Qt::Key_Return);
+
+        QCOMPARE(editor_->toPlainText(), QString("   > > deep quote\n   > > "));
+        QCOMPARE(editor_->textCursor().blockNumber(), 1);
+        QCOMPARE(editor_->textCursor().positionInBlock(), 7);
+    }
+
+    void testEnterAfterHorizontalRuleDoesNotStartList_data()
+    {
+        QTest::addColumn<QString>("line");
+
+        QTest::newRow("compact-stars") << QString("***");
+        QTest::newRow("spaced-dashes") << QString("- - -");
+        QTest::newRow("spaced-stars") << QString("* * *");
+    }
+
+    void testEnterAfterHorizontalRuleDoesNotStartList()
+    {
+        QFETCH(QString, line);
+
+        editor_->setPlainText(line);
+
+        QTextCursor cursor = editor_->textCursor();
+        cursor.movePosition(QTextCursor::End);
+        editor_->setTextCursor(cursor);
+
+        QTest::keyClick(editor_, Qt::Key_Return);
+
+        QCOMPARE(editor_->toPlainText(), line + QString("\n"));
+        QCOMPARE(editor_->textCursor().blockNumber(), 1);
+        QCOMPARE(editor_->textCursor().positionInBlock(), 0);
+    }
+
     void testTabIndentOrderedListAndRecount()
     {
         const int tabSize = effectiveTabSize();

@@ -78,6 +78,30 @@ private slots:
         QCOMPARE(tokens[4].type, TokenType::LinkBracket);
     }
 
+    void testAngleAutoLink()
+    {
+        ContextStack ctx;
+        QVector<InlineToken> tokens;
+        InlineParser::parse("<https://example.com>", 0, ctx, tokens);
+
+        QVERIFY(tokens.size() >= 3);
+        QCOMPARE(tokens[0].type, TokenType::LinkBracket);
+        QCOMPARE(tokens[1].type, TokenType::LinkUrl);
+        QCOMPARE(tokens[2].type, TokenType::LinkBracket);
+    }
+
+    void testAngleAutoLinkRejectsNonLinkText()
+    {
+        ContextStack ctx;
+        QVector<InlineToken> tokens;
+        InlineParser::parse("<TagName>", 0, ctx, tokens);
+
+        for (const auto &token : tokens) {
+            QVERIFY(token.type != TokenType::LinkUrl);
+            QVERIFY(token.type != TokenType::LinkBracket);
+        }
+    }
+
     void testImage()
     {
         ContextStack ctx;
@@ -87,6 +111,69 @@ private slots:
         QVERIFY(tokens.size() >= 5);
         QCOMPARE(tokens[0].type, TokenType::ImageBracket);
         QCOMPARE(tokens[1].type, TokenType::ImageAlt);
+    }
+
+    void testLinkedImageLink()
+    {
+        ContextStack ctx;
+        QVector<InlineToken> tokens;
+        InlineParser::parse("[![logo](img.png)](https://example.com)", 0, ctx, tokens);
+
+        QVERIFY(tokens.size() >= 9);
+        QCOMPARE(tokens[0].type, TokenType::LinkBracket);
+        QCOMPARE(tokens[1].type, TokenType::ImageBracket);
+        QCOMPARE(tokens[2].type, TokenType::ImageAlt);
+        QCOMPARE(tokens[3].type, TokenType::ImageBracket);
+        QCOMPARE(tokens[4].type, TokenType::ImageUrl);
+        QCOMPARE(tokens[5].type, TokenType::ImageBracket);
+        QCOMPARE(tokens[6].type, TokenType::LinkBracket);
+        QCOMPARE(tokens[7].type, TokenType::LinkUrl);
+        QCOMPARE(tokens[8].type, TokenType::LinkBracket);
+    }
+
+    void testUnderlinePlusPlus()
+    {
+        ContextStack ctx;
+        QVector<InlineToken> tokens;
+        InlineParser::parse("++underlined++", 0, ctx, tokens);
+
+        QVERIFY(tokens.size() >= 3);
+        QCOMPARE(tokens[0].type, TokenType::UnderlineMarker);
+        QCOMPARE(tokens[1].type, TokenType::Underline);
+        QCOMPARE(tokens[2].type, TokenType::UnderlineMarker);
+    }
+
+    void testHighlightEqualsEquals()
+    {
+        ContextStack ctx;
+        QVector<InlineToken> tokens;
+        InlineParser::parse("==marked==", 0, ctx, tokens);
+
+        QVERIFY(tokens.size() >= 3);
+        QCOMPARE(tokens[0].type, TokenType::HighlightMarker);
+        QCOMPARE(tokens[1].type, TokenType::Highlight);
+        QCOMPARE(tokens[2].type, TokenType::HighlightMarker);
+    }
+
+    void testSuperscriptAndSubscript()
+    {
+        ContextStack ctx;
+        QVector<InlineToken> tokens;
+        InlineParser::parse("x^2^ H~2~O", 0, ctx, tokens);
+
+        bool hasSuperscript = false;
+        bool hasSubscript = false;
+        for (const auto &token : tokens) {
+            if (token.type == TokenType::Superscript) {
+                hasSuperscript = true;
+            }
+            if (token.type == TokenType::Subscript) {
+                hasSubscript = true;
+            }
+        }
+
+        QVERIFY(hasSuperscript);
+        QVERIFY(hasSubscript);
     }
 
     void testStrikethrough()
