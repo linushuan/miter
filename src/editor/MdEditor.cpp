@@ -22,6 +22,8 @@
 #include <QMap>
 #include <QFontInfo>
 #include <QFontDatabase>
+#include <QTextCharFormat>
+#include <QTextFormat>
 
 namespace {
 Theme resolveThemeByName(const QString &themeName)
@@ -44,6 +46,66 @@ Theme resolveThemeByName(const QString &themeName)
         }
     }
     return theme;
+}
+
+void applyThemePalette(QPlainTextEdit *editor, const Theme &theme)
+{
+    QPalette pal = editor->palette();
+    pal.setColor(QPalette::Base, theme.background);
+    pal.setColor(QPalette::Text, theme.foreground);
+    pal.setColor(QPalette::WindowText, theme.foreground);
+    pal.setColor(QPalette::ButtonText, theme.foreground);
+    pal.setColor(QPalette::BrightText, theme.foreground);
+    pal.setColor(QPalette::Highlight, theme.selectionBg);
+    pal.setColor(QPalette::HighlightedText, theme.selectionFg);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 12, 0)
+    pal.setColor(QPalette::PlaceholderText, theme.lineNumberFg);
+#endif
+    editor->setPalette(pal);
+}
+
+QList<QInputMethodEvent::Attribute> normalizedPreeditAttributes(
+    const QList<QInputMethodEvent::Attribute> &attributes,
+    int preeditLength,
+    const QColor &foreground)
+{
+    QList<QInputMethodEvent::Attribute> normalized;
+    normalized.reserve(attributes.size() + 1);
+
+    bool hasTextFormat = false;
+    for (const QInputMethodEvent::Attribute &attr : attributes) {
+        if (attr.type != QInputMethodEvent::TextFormat) {
+            normalized.push_back(attr);
+            continue;
+        }
+
+        hasTextFormat = true;
+        QTextCharFormat fmt;
+        if (attr.value.canConvert<QTextFormat>()) {
+            fmt = qvariant_cast<QTextFormat>(attr.value).toCharFormat();
+        } else if (attr.value.canConvert<QTextCharFormat>()) {
+            fmt = qvariant_cast<QTextCharFormat>(attr.value);
+        }
+        fmt.setForeground(foreground);
+
+        normalized.push_back(QInputMethodEvent::Attribute(
+            QInputMethodEvent::TextFormat,
+            attr.start,
+            attr.length,
+            fmt));
+    }
+
+    if (!hasTextFormat && preeditLength > 0) {
+        QTextCharFormat fmt;
+        fmt.setForeground(foreground);
+        normalized.push_back(QInputMethodEvent::Attribute(
+            QInputMethodEvent::TextFormat,
+            0,
+            preeditLength,
+            fmt));
+    }
+
+    return normalized;
 }
 
 int leadingSpaceCount(const QString &line)
@@ -403,12 +465,7 @@ MdEditor::MdEditor(QWidget *parent)
     highlightCurrentLine();
 
     // Apply theme colors.
-    QPalette pal = palette();
-    pal.setColor(QPalette::Base, theme.background);
-    pal.setColor(QPalette::Text, theme.foreground);
-    pal.setColor(QPalette::Highlight, theme.selectionBg);
-    pal.setColor(QPalette::HighlightedText, theme.selectionFg);
-    setPalette(pal);
+    applyThemePalette(this, theme);
     currentLineBg_ = theme.currentLineBg;
     lineNumberFg_ = theme.lineNumberFg;
     lineNumberBg_ = theme.lineNumberBg;
@@ -788,12 +845,26 @@ void MdEditor::keyPressEvent(QKeyEvent *event)
 void MdEditor::inputMethodEvent(QInputMethodEvent *event)
 {
     // Pause highlighter during IME composition to avoid excessive rehighlights
-    bool composing = !event->preeditString().isEmpty();
+    const bool composing = !event->preeditString().isEmpty();
     highlighter_->setEnabled(!composing);
-    QPlainTextEdit::inputMethodEvent(event);
-    if (!composing) {
-        highlighter_->rehighlight();
+
+    if (composing) {
+        const auto attrs = normalizedPreeditAttributes(
+            event->attributes(),
+            event->preeditString().size(),
+            palette().color(QPalette::Text));
+
+        QInputMethodEvent normalizedEvent(event->preeditString(), attrs);
+        normalizedEvent.setCommitString(
+            event->commitString(),
+            event->replacementStart(),
+            event->replacementLength());
+        QPlainTextEdit::inputMethodEvent(&normalizedEvent);
+        return;
     }
+
+    QPlainTextEdit::inputMethodEvent(event);
+    highlighter_->rehighlight();
 }
 
 void MdEditor::setGlobalFontPointSize(int pointSize)
@@ -864,12 +935,7 @@ void MdEditor::setThemeName(const QString &themeName)
     Theme theme = resolveThemeByName(themeName_);
 
     highlighter_->setTheme(theme);
-    QPalette pal = palette();
-    pal.setColor(QPalette::Base, theme.background);
-    pal.setColor(QPalette::Text, theme.foreground);
-    pal.setColor(QPalette::Highlight, theme.selectionBg);
-    pal.setColor(QPalette::HighlightedText, theme.selectionFg);
-    setPalette(pal);
+    applyThemePalette(this, theme);
 
     currentLineBg_ = theme.currentLineBg;
     lineNumberFg_ = theme.lineNumberFg;

@@ -5,6 +5,8 @@
 #include <QTextCursor>
 #include <QTextBlock>
 #include <QFontInfo>
+#include <QPalette>
+#include <QColor>
 
 #include "editor/MdEditor.h"
 #include "config/Settings.h"
@@ -551,6 +553,20 @@ private slots:
     {
         QFontInfo info(editor_->font());
         QVERIFY(info.fixedPitch());
+    }
+
+    void testWhiteThemeKeepsImePreeditColorsReadable()
+    {
+        editor_->setThemeName("white");
+
+        const QPalette pal = editor_->palette();
+        const QColor base = pal.color(QPalette::Base);
+        const QColor text = pal.color(QPalette::Text);
+
+        QCOMPARE(pal.color(QPalette::BrightText), text);
+        QCOMPARE(pal.color(QPalette::WindowText), text);
+        QCOMPARE(pal.color(QPalette::ButtonText), text);
+        QVERIFY(text != base);
     }
 
 private:
