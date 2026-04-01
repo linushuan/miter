@@ -264,8 +264,8 @@ BlockType BlockParser::classify(const QString &text, ContextStack &ctx, QVector<
         return BlockType::LatexDisplayStart;
     }
 
-    // 8. \begin{env} LaTeX env start
-    static QRegularExpression beginRe(R"(^\s*\\begin\{(\w+)\})");
+    // 8. \begin{env} LaTeX env start (standalone line only)
+    static QRegularExpression beginRe(R"(^\s*\\begin\{([^}\s]+)\}\s*$)");
     auto beginMatch = beginRe.match(content);
     if (beginMatch.hasMatch()) {
         appendContainerMarkers(prefix);
@@ -341,7 +341,8 @@ bool BlockParser::isSetextH2Underline(const QString &nextLine)
 
 bool BlockParser::matchCodeFenceStart(const QString &text, QChar &fenceChar, int &fenceLen, int &indent, QString &lang)
 {
-    static QRegularExpression re(R"(^( {0,3})(`{3,}|~{3,})(\w*)\s*$)");
+    // Allow common info strings like c++, objective-c, python3.
+    static QRegularExpression re(R"(^( {0,3})(`{3,}|~{3,})([^\s`]*)\s*$)");
     auto m = re.match(text);
     if (!m.hasMatch()) return false;
 

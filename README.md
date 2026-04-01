@@ -1,35 +1,67 @@
 # miter
 
-miter is a lightweight Markdown editor for Linux, macOS, and Windows.
-It focuses on fast typing, syntax highlighting, and clean reading while editing.
+miter is a lightweight, cross-platform Markdown editor built with Qt 6.
+It focuses on fast typing, stable highlighting, and predictable editing behavior.
 
-## What You Can Do
+## Core Features
 
-- Edit Markdown with multi-tab workflow.
-- Highlight Markdown, HTML-style comments, code fences, tables, links/images, and LaTeX.
-- Highlight extended inline syntax: `++underline++`, `==highlight==`, superscript `^text^`, subscript `~text~`.
-- Highlight linked-image syntax: `[![alt](image-url)](link-url)`.
-- Highlight angle autolinks: `<https://example.com>`.
-- Render strikethrough text with strike-out font style.
-- Color task checkbox markers (`[ ]`, `[x]`) in list items.
-- Use dark/white theme toggle from the toolbar.
-- Auto-continue list items on Enter (bullets, numbers, checkboxes).
-- Auto-continue blockquote prefixes with current indentation and depth.
-- Auto-close pairs for `()`, `[]`, `{}`, `<>`, `$`, and backticks, with skip-over behavior when closer already exists.
-- Auto-insert closing blocks for `$$`, triple-backtick code fences (including language-tagged fences), and `\\begin{env}`.
-- Prevent horizontal-rule lines (`***`, `- - -`, `* * *`) from being treated as list items on Enter.
-- Save files with standard keyboard shortcuts.
-- Detect external file changes, mark the tab, and offer to reload on focus.
+- Multi-tab Markdown editing workflow.
+- Real-time Markdown highlighting with stateful block parsing.
+- Extended inline syntax support:
+	- `++underline++`
+	- `==highlight==`
+	- superscript `^text^`
+	- subscript `~text~`
+	- strikethrough `~~text~~` (strike-out font style)
+- LaTeX support:
+	- inline `$...$`
+	- display `$$ ... $$`
+	- environment blocks `\begin{env} ... \end{env}`
+- Link and image support:
+	- `[text](url)`
+	- `![alt](url)`
+	- linked image `[![alt](image-url)](link-url)`
+	- angle autolinks `<https://example.com>` and `<user@example.com>`
+- Task list checkbox marker highlighting (`[ ]`, `[x]`, `[X]`).
+- Blockquote styling with a gray background and quote-border color.
 
-## Markdown Behavior Spec
+## Autocomplete Behavior
 
-Full behavior and edge-case spec is documented in [spec.md](spec.md).
+- Pair autocomplete at line end (no non-space text after cursor):
+	- `()`, `[]`, `{}`
+	- `<>`
+	- `$...$`
+	- `` `...` ``
+- Closer skip-over behavior:
+	- typing a closer on an existing closer moves cursor right instead of inserting.
+- Enter-based multiline autocomplete:
+	- `$$` becomes:
+		- opening `$$`
+		- empty line
+		- closing `$$`
+	- lines starting with three backticks (for example, backtick-fence plus language tag like `python`) auto-insert a closing fence.
+	- `\\begin{env}` auto-inserts matching `\\end{env}`.
+- Enter line continuation:
+	- list continuation for ordered/unordered/task items
+	- blockquote continuation with preserved indentation and quote depth
+- Horizontal-rule safety:
+	- `***`, `- - -`, and `* * *` are not treated as lists on Enter.
 
-## Quick Start
+Complete behavior details are documented in [spec.md](spec.md).
+
+## Project Structure
+
+- [src/editor](src/editor): editor widgets, keyboard behaviors, tab/session/search management.
+- [src/highlight](src/highlight): `MdHighlighter` token-to-format rendering.
+- [src/parser](src/parser): block parser, inline parser, LaTeX parser, context stack.
+- [src/config](src/config): settings/theme loading.
+- [themes](themes): TOML theme files.
+- [tests](tests): parser/editor/highlighter regression tests.
+- [scripts](scripts): platform packaging and local update scripts.
+
+## Build And Run
 
 ### Linux
-
-Build and run from source:
 
 ```bash
 cmake -S . -B build
@@ -45,126 +77,104 @@ Open files directly:
 
 ### macOS
 
-Install dependencies (Homebrew example):
-
 ```bash
 brew install cmake qt
-```
-
-Build:
-
-```bash
 cmake -S . -B build -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
 cmake --build build -j$(sysctl -n hw.ncpu)
-```
-
-Run:
-
-```bash
 open build/miter.app
 ```
 
-### Windows
-
-Install Qt 6 and CMake, then build from a Developer PowerShell:
+### Windows (Developer PowerShell)
 
 ```powershell
 cmake -S . -B build -DCMAKE_PREFIX_PATH="C:/Qt/6.8.0/msvc2022_64"
 cmake --build build --config Release
-./build/Release/miter.exe
+.\build\Release\miter.exe
 ```
 
-## Packaging (macOS / Windows)
+## Test
 
-Run packaging on the target OS (you cannot build a runnable macOS package on Linux, and vice versa).
+Run full test suite:
+
+```bash
+cmake --build build -j$(nproc)
+cd build
+ctest --output-on-failure
+```
+
+Markdown-focused tests:
+
+```bash
+cmake --build build -j$(nproc) --target test_block_parser test_inline_parser test_latex_parser test_md_editor test_highlighter
+cd build
+ctest --output-on-failure -R "test_block_parser|test_inline_parser|test_latex_parser|test_md_editor|test_highlighter"
+```
+
+## Packaging
+
+Run packaging on the target OS.
 
 ### macOS package
 
 ```bash
-cd ~/linus/coding/vibe-coding/lite-md
 ./scripts/package-macos.sh
 ```
 
-This produces a `.dmg` package in the build directory (default: `build-macos/`).
+Output: `.dmg` in the macOS build directory (default `build-macos/`).
 
-### Windows package (PowerShell)
+### Windows package
 
 ```powershell
-cd ~\linus\coding\vibe-coding\lite-md
 powershell -ExecutionPolicy Bypass -File .\scripts\package-windows.ps1
 ```
 
-This produces a `.zip` package in the build directory (default: `build-win\`).
+Output: `.zip` in the Windows build directory (default `build-win\`).
 
-### Windows package from Bash (Git Bash / WSL with PowerShell)
-
-```bash
-cd ~/linus/coding/vibe-coding/lite-md
-./scripts/package-windows.sh
-```
-
-## Install / Update In `~/` (Linux)
-
-Use this for first install and for every later update:
+## Local Install Or Update (Linux)
 
 ```bash
-cd ~/linus/coding/vibe-coding/lite-md
 ./scripts/update-local.sh
 ```
 
-Default install target is `~/.local`.
+Default install target: `~/.local`.
 
-## Shortcuts
+## Keyboard Shortcuts
 
-- `Ctrl+O`: Import/Open file
-- `Ctrl+S`: Save
-- `Ctrl+Shift+S`: Save As
-- `Ctrl+T`: New tab
-- `Ctrl+W`: Close tab
-- `Ctrl+Tab`: Next tab
-- `Ctrl+Shift+Tab`: Previous tab
-- `Ctrl+F`: Search
-- `Ctrl++` / `Ctrl+-` / `Ctrl+0`: Font zoom in/out/reset
-- `Ctrl+L`: Toggle line numbers
-- `Ctrl+Shift+W`: Toggle word wrap
-- `F11`: Focus mode
-- `F12`: Fullscreen
+- `Ctrl+O`: open/import file
+- `Ctrl+S`: save
+- `Ctrl+Shift+S`: save as
+- `Ctrl+T`: new tab
+- `Ctrl+W`: close tab
+- `Ctrl+Tab`: next tab
+- `Ctrl+Shift+Tab`: previous tab
+- `Ctrl+F`: search
+- `Ctrl++` / `Ctrl+-` / `Ctrl+0`: zoom in/out/reset
+- `Ctrl+L`: toggle line numbers
+- `Ctrl+Shift+W`: toggle word wrap
+- `F11`: focus mode
+- `F12`: fullscreen
 
-## Themes
+## Themes And Settings
 
-- Use the toolbar theme icon button to switch between dark and white.
-- Theme files are stored in [themes](themes).
+- Theme files live in [themes](themes).
+- Use the toolbar theme button to switch dark/white themes.
+- Settings are stored in:
+	- Linux: `~/.config/miter/config.toml`
+	- macOS: `~/Library/Preferences/miter/config.toml`
+	- Windows: `%LOCALAPPDATA%\\miter\\config.toml`
 
-## Config File
-
-User settings are saved at:
-
-- Linux (typical): `~/.config/miter/config.toml`
-- macOS (typical): `~/Library/Preferences/miter/config.toml`
-- Windows (typical): `%LOCALAPPDATA%\\miter\\config.toml`
-
-Example editor settings:
+Example:
 
 ```toml
 [editor]
 tab_size = 2
 ```
 
-`tab_size` controls how many spaces are inserted when you press `Tab`
-and the indent width used by list Tab/Shift+Tab behavior.
+`tab_size` controls inserted spaces for `Tab` and list indentation logic.
 
 ## Acknowledgements
 
-This project was developed with AI assistance. The following projects were referenced for design decisions and architecture during development:
-
-- [Ghostwriter](https://github.com/KDE/ghostwriter) (GPL-3.0) - editor structure, line number area, focus mode
-- [QOwnNotes](https://github.com/pbek/QOwnNotes) (GPL-2.0) - syntax highlighter design
-- [Zettlr](https://github.com/Zettlr/Zettlr) (GPL-3.0) - CJK text handling, display math state
-- [lite-xl](https://github.com/lite-xl/lite-xl) (MIT) - UI minimalism philosophy
-- [render-markdown.nvim](https://github.com/MeanderingProgrammer/render-markdown.nvim) (MIT) - token color semantics
-- [Marktext](https://github.com/marktext/marktext) (MIT) - theme structure
-
-See [NOTICE](./NOTICE) for full copyright notices.
+See [NOTICE](NOTICE) for third-party references and notices.
 
 ## License
 

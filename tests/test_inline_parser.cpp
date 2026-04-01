@@ -102,6 +102,18 @@ private slots:
         }
     }
 
+    void testAngleAutoLinkEmail()
+    {
+        ContextStack ctx;
+        QVector<InlineToken> tokens;
+        InlineParser::parse("<user@example.com>", 0, ctx, tokens);
+
+        QVERIFY(tokens.size() >= 3);
+        QCOMPARE(tokens[0].type, TokenType::LinkBracket);
+        QCOMPARE(tokens[1].type, TokenType::LinkUrl);
+        QCOMPARE(tokens[2].type, TokenType::LinkBracket);
+    }
+
     void testImage()
     {
         ContextStack ctx;
@@ -143,6 +155,18 @@ private slots:
         QCOMPARE(tokens[2].type, TokenType::UnderlineMarker);
     }
 
+    void testUnderlineRejectsSpaceWrappedContent()
+    {
+        ContextStack ctx;
+        QVector<InlineToken> tokens;
+        InlineParser::parse("++ spaced ++", 0, ctx, tokens);
+
+        for (const auto &token : tokens) {
+            QVERIFY(token.type != TokenType::Underline);
+            QVERIFY(token.type != TokenType::UnderlineMarker);
+        }
+    }
+
     void testHighlightEqualsEquals()
     {
         ContextStack ctx;
@@ -174,6 +198,18 @@ private slots:
 
         QVERIFY(hasSuperscript);
         QVERIFY(hasSubscript);
+    }
+
+    void testSuperscriptAndSubscriptRejectWhitespace()
+    {
+        ContextStack ctx;
+        QVector<InlineToken> tokens;
+        InlineParser::parse("x^ 2^ H~ 2~O", 0, ctx, tokens);
+
+        for (const auto &token : tokens) {
+            QVERIFY(token.type != TokenType::Superscript);
+            QVERIFY(token.type != TokenType::Subscript);
+        }
     }
 
     void testStrikethrough()
@@ -269,6 +305,30 @@ private slots:
             QVERIFY(t.type != TokenType::InlineCodeMark);
         }
         QVERIFY(foundComment);
+    }
+
+    void testTokenRangesRemainInBoundsForEdgeSamples()
+    {
+        const QStringList samples = {
+            QStringLiteral("<https://example.com>"),
+            QStringLiteral("<user@example.com>"),
+            QStringLiteral("[![圖](img.png)](https://example.com)"),
+            QStringLiteral("==mark== ++under++ ~~gone~~"),
+            QStringLiteral("x^2^ H~2~O"),
+            QStringLiteral("``$x$`` and `code`"),
+            QStringLiteral("\\*escaped\\*")
+        };
+
+        ContextStack ctx;
+        QVector<InlineToken> tokens;
+        for (const QString &sample : samples) {
+            InlineParser::parse(sample, 0, ctx, tokens);
+            for (const auto &token : tokens) {
+                QVERIFY(token.start >= 0);
+                QVERIFY(token.length >= 0);
+                QVERIFY(token.start + token.length <= sample.length());
+            }
+        }
     }
 };
 

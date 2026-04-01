@@ -187,6 +187,29 @@ private slots:
         QCOMPARE(ctx.topState(), BlockState::LatexEnv);
     }
 
+    void testLatexEnvWithStarName()
+    {
+        ContextStack ctx;
+        QVector<BlockToken> tokens;
+
+        QCOMPARE(BlockParser::classify("\\begin{align*}", ctx, tokens), BlockType::LatexEnvStart);
+        QVERIFY(ctx.inLatex());
+        QCOMPARE(ctx.top().envName, QString("align*"));
+
+        QCOMPARE(BlockParser::classify("x &= y", ctx, tokens), BlockType::LatexEnvBody);
+        QCOMPARE(BlockParser::classify("\\end{align*}", ctx, tokens), BlockType::LatexEnvEnd);
+        QVERIFY(!ctx.inLatex());
+    }
+
+    void testLatexEnvDoesNotStartWithTrailingContent()
+    {
+        ContextStack ctx;
+        QVector<BlockToken> tokens;
+
+        QCOMPARE(BlockParser::classify("\\begin{equation} x = 1", ctx, tokens), BlockType::Normal);
+        QVERIFY(!ctx.inLatex());
+    }
+
     void testLatexEnvInlineMentionDoesNotStartBlock()
     {
         ContextStack ctx;
@@ -304,6 +327,52 @@ private slots:
 
         // 4+ spaces before ``` is not a fence
         QCOMPARE(BlockParser::classify("    ```", ctx, tokens), BlockType::Normal);
+    }
+
+    void testCodeFenceInfoStringWithSymbols()
+    {
+        ContextStack ctx;
+        QVector<BlockToken> tokens;
+
+        QCOMPARE(BlockParser::classify("```c++", ctx, tokens), BlockType::CodeFenceStart);
+
+        bool hasFenceLang = false;
+        for (const auto &token : tokens) {
+            if (token.type == TokenType::CodeFenceLang) {
+                hasFenceLang = true;
+                break;
+            }
+        }
+        QVERIFY(hasFenceLang);
+    }
+
+    void testTokenRangesRemainInBoundsForEdgeSamples()
+    {
+        const QStringList lines = {
+            QStringLiteral("***"),
+            QStringLiteral("- - -"),
+            QStringLiteral("* * *"),
+            QStringLiteral("> > - [x] done"),
+            QStringLiteral("| head | value |"),
+            QStringLiteral("```python"),
+            QStringLiteral("\t```"),
+            QStringLiteral("\\begin{align*}"),
+            QStringLiteral("<https://example.com>"),
+            QStringLiteral("[![img](a.png)](https://example.com)")
+        };
+
+        ContextStack ctx;
+        QVector<BlockToken> tokens;
+
+        for (const QString &line : lines) {
+            BlockParser::classify(line, ctx, tokens);
+            const int lineLen = line.length();
+            for (const auto &token : tokens) {
+                QVERIFY(token.start >= 0);
+                QVERIFY(token.length >= 0);
+                QVERIFY(token.start + token.length <= lineLen);
+            }
+        }
     }
 
     void testHtmlCommentSingleLine()

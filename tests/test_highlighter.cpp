@@ -162,6 +162,25 @@ private slots:
         QCOMPARE(fmt.foreground().color(), theme.heading[1]);
     }
 
+    void testSetextH1HeadingLineUpdatesWhenUnderlineTypedLater()
+    {
+        const Theme theme = Theme::darkDefault();
+        QTextDocument doc;
+        MdHighlighter highlighter(&doc, theme);
+
+        doc.setPlainText("Title\n");
+        highlighter.rehighlight();
+
+        QTextCursor cursor(&doc);
+        cursor.movePosition(QTextCursor::End);
+        cursor.insertText("===");
+        QCoreApplication::processEvents();
+
+        const QTextCharFormat fmt = firstCharFormat(doc, 0);
+        QVERIFY(fmt.isValid());
+        QCOMPARE(fmt.foreground().color(), theme.heading[0]);
+    }
+
     void testHrAfterBlankLineKeepsHrFormat()
     {
         const Theme theme = Theme::darkDefault();
@@ -243,6 +262,21 @@ private slots:
         QCOMPARE(fmt.foreground().color(), theme.listBulletFg);
     }
 
+    void testTaskCheckboxUppercaseUsesBulletColor()
+    {
+        const Theme theme = Theme::darkDefault();
+        QTextDocument doc;
+        MdHighlighter highlighter(&doc, theme);
+
+        doc.setPlainText("- [X] done");
+        highlighter.rehighlight();
+
+        const QTextBlock block = doc.findBlockByNumber(0);
+        const QTextCharFormat fmt = formatAt(block, 2);
+        QVERIFY(fmt.isValid());
+        QCOMPARE(fmt.foreground().color(), theme.listBulletFg);
+    }
+
     void testAngleAutoLinkUsesLinkUrlColor()
     {
         const Theme theme = Theme::darkDefault();
@@ -280,6 +314,47 @@ private slots:
         QVERIFY(urlFmt.isValid());
         QCOMPARE(altFmt.foreground().color(), theme.imageFg);
         QCOMPARE(urlFmt.foreground().color(), theme.linkUrlFg);
+    }
+
+    void testComplexMarkdownFormatRangesStayInBounds()
+    {
+        const Theme theme = Theme::darkDefault();
+        QTextDocument doc;
+        MdHighlighter highlighter(&doc, theme);
+
+        doc.setPlainText(
+            "# Title\n"
+            "> - [x] ~~done~~ and ==mark==\n"
+            "\n"
+            "Setext heading\n"
+            "---\n"
+            "```c++\n"
+            "int x = 42;\n"
+            "```\n"
+            "$$\n"
+            "E = mc^2\n"
+            "$$\n"
+            "\\begin{align*}\n"
+            "x &= y\\\\\n"
+            "\\end{align*}\n"
+            "[![img](pic.png)](https://example.com) and <https://example.com>\n"
+            "* * *\n"
+        );
+        highlighter.rehighlight();
+
+        for (QTextBlock block = doc.begin(); block.isValid(); block = block.next()) {
+            const int blockLen = block.text().length();
+            if (!block.layout()) {
+                continue;
+            }
+
+            const auto ranges = block.layout()->formats();
+            for (const auto &range : ranges) {
+                QVERIFY(range.start >= 0);
+                QVERIFY(range.length >= 0);
+                QVERIFY(range.start + range.length <= blockLen);
+            }
+        }
     }
 };
 

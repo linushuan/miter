@@ -1,159 +1,186 @@
-# miter Markdown Editing and Highlight Spec
+# miter Markdown Behavior Spec
 
-## 1. Scope
+## 1. Purpose
 
-This spec defines markdown typing behavior and syntax highlighting in the editor.
-It covers:
+This document is the source of truth for Markdown parsing, typing-time autocomplete,
+and syntax highlighting behavior in miter.
 
-- Block-level parsing (`src/parser/BlockParser.cpp`)
-- Inline parsing (`src/parser/InlineParser.cpp`)
-- Rendering and style mapping (`src/highlight/MdHighlighter.cpp`)
-- Typing-time autocomplete (`src/editor/MdEditor.cpp`)
-- Regression and edge-case tests (`tests/`)
+Implementation mapping:
 
-## 2. Parsing Pipeline
+- Block parsing: `src/parser/BlockParser.cpp`
+- Inline parsing: `src/parser/InlineParser.cpp`
+- LaTeX inline/body tokenization: `src/parser/LatexParser.cpp`
+- Stateful highlight rendering: `src/highlight/MdHighlighter.cpp`
+- Keyboard and Enter autocomplete: `src/editor/MdEditor.cpp`
+- Regression tests: `tests/`
 
-1. Each block is classified by `BlockParser` into one of:
-   - heading, list, blockquote, table, horizontal rule, code fence, LaTeX display/env, HTML comment, normal text
-2. Block tokens are emitted for structural markers.
-3. Inline parsing runs only when the block is not code-fence body/start/end and not HTML comment.
-4. Inline token precedence is:
-   - escape
-   - inline code
-   - HTML comment
-   - inline LaTeX
-   - angle autolink
-   - linked image link (`[![alt](img)](url)`)
-   - image
-   - link
-   - underline (`++text++`)
-   - highlight (`==text==`)
-   - bold/italic
-   - superscript/subscript
-   - strikethrough
-   - hard break
+## 2. Processing Model
 
-## 3. Supported Syntax
+For each line, highlighting is resolved in this order:
 
-### 3.1 Block Syntax
+1. Restore parse context from previous block (`ContextStack`).
+2. Classify current block (`BlockParser::classify`) and emit block tokens.
+3. Apply block token formats.
+4. Apply inline parsing where eligible.
+5. Save updated context for the next block.
 
-- ATX headings: `#` to `######`
-- Setext headings:
-  - H1 underline: `===`
-  - H2 underline: `---`
-  - Leading spaces (0-3) are allowed on underline lines
-- Fenced code blocks:
-  - Backtick and tilde fences with optional language tag
-- Blockquotes:
-  - Nested markers and indentation are preserved
-- Lists:
-  - ordered (`1.`, `1)`)
-  - unordered (`-`, `*`, `+`)
-  - task checkboxes (`[ ]`, `[x]`, `[X]`)
-- Tables: pipe-based rows
-- Horizontal rules:
-  - `***`, `---`, `___`
-  - spaced forms like `- - -`, `* * *`
-- LaTeX display fence: `$$ ... $$`
-- LaTeX environments: `\begin{env} ... \end{env}`
-- HTML comment blocks: `<!-- ... -->`
+Inline parsing is skipped for code-fence bodies and HTML comment blocks.
 
-### 3.2 Inline Syntax
+## 3. Block Grammar
 
-- Inline code with variable backtick length
-- Links: `[text](url)`
-- Images: `![alt](url)`
-- Linked images: `[![alt](img-url)](link-url)`
-- Angle autolinks: `<https://example.com>`, `<mailto:a@b.com>`, `<www.example.com>`
-- Bold/italic/bold-italic using `*`/`_`
-- Strikethrough: `~~text~~`
-- Underline extension: `++text++`
-- Highlight extension: `==text==`
-- Superscript extension: `^text^`
-- Subscript extension: `~text~`
-- Hard breaks via trailing 2+ spaces or trailing backslash
-- Escape sequences (`\*`, `\_`, etc.)
+### 3.1 Supported block types
 
-## 4. Autocomplete Rules
+- ATX headings (`#` to `######`)
+- Setext headings
+  - H1 underline: `===` (3+)
+  - H2 underline: `---` (3+)
+  - leading indentation up to 3 spaces allowed on underline line
+- Fenced code blocks
+  - backtick and tilde fences
+  - info strings accepted after opening fence (for example `c++`, `python`, `objective-c`)
+- Blockquotes with nested depth
+- Ordered and unordered lists
+- Task list markers (`[ ]`, `[x]`, `[X]`)
+- Table rows (pipe-based)
+- Horizontal rules
+  - compact: `***`, `---`, `___`
+  - spaced: `* * *`, `- - -`
+- LaTeX display blocks (`$$`)
+- LaTeX environment blocks (`\begin{env}` / `\end{env}`)
+- HTML comment blocks (`<!-- ... -->`)
 
-### 4.1 Pair Autocomplete
+### 3.2 Disambiguation rules
 
-Pairs supported:
+- Horizontal rules are not parsed as list items.
+- `\begin{env}` starts a LaTeX environment block only when it is a standalone line.
+- Setext underlines are only treated as setext markers when the previous line is non-empty and context is normal text.
 
-- `()` `[]` `{}` `<>` `$$` ```` ``
+## 4. Inline Grammar
+
+Inline parser precedence (top to bottom):
+
+1. escapes
+2. inline code
+3. inline HTML comments
+4. inline LaTeX
+5. angle autolinks (`<...>`)
+6. linked images (`[![alt](img)](url)`)
+7. images (`![alt](url)`)
+8. links (`[text](url)`)
+9. underline (`++text++`)
+10. highlight (`==text==`)
+11. emphasis (`*`, `_`, `**`, `***`)
+12. superscript/subscript (`^text^`, `~text~`)
+13. strikethrough (`~~text~~`)
+14. hard breaks
+
+### 4.1 Supported inline extensions
+
+- Underline: `++text++`
+- Highlight: `==text==`
+- Superscript: `^text^`
+- Subscript: `~text~`
+- Angle autolink: `<https://...>`, `<user@example.com>`
+- Linked-image link: `[![image](url)](url)`
+
+## 5. Autocomplete Specification
+
+### 5.1 Pair insertion
+
+Pairs:
+
+- `()`
+- `[]`
+- `{}`
+- `<>`
+- `$...$`
+- `` `...` ``
 
 Rules:
 
-- Autocomplete only triggers when there is no non-space text after the cursor in the current line.
-- Autocomplete does not trigger when text is selected.
-- If the typed closer already exists at cursor position, only move cursor right (do not insert duplicate).
-- Existing closer skip logic applies to `) ] } > $ ``.
+- Insert pair only if:
+  - there is no selection
+  - there is no non-space text after cursor on current line
+- Typing a closer when the same closer is already at cursor position moves cursor right (skip-over).
 
-### 4.2 Multiline Autocomplete on Enter
+### 5.2 Enter-based block completion
 
-At end-of-line (without Shift+Enter):
+When cursor is at end-of-line and Enter is pressed (without Shift):
 
-- `$$` opens a display block and inserts closing `$$`
-- ````` (with or without language, e.g. ` ```python`) opens a fenced code block and inserts closing `````
-- `\begin{env}` inserts matching `\end{env}`
-- Existing immediate auto-closed block is detected to avoid duplicate fence/env insertion
+- On line `$$`, insert a closing `$$` and place cursor on the middle line.
+- On lines starting with three backticks, insert a matching closing fence.
+- On standalone `\begin{env}`, insert matching `\end{env}`.
+- If the immediate closing block already exists, do not duplicate it.
 
-### 4.3 Line Continuation
+### 5.3 Continuation behavior
 
-- Ordered and unordered lists continue on Enter.
-- Blockquote continuation preserves current indentation and marker depth.
-- Horizontal rule lines (`***`, `- - -`, `* * *`, etc.) are not treated as list items on Enter.
+- Lists auto-continue on Enter.
+- Blockquotes auto-continue using current indentation and quote depth.
+- HR lines (`***`, `- - -`, `* * *`) do not trigger list continuation.
 
-### 4.4 Explicit Non-goals for Autocomplete
+### 5.4 Explicit non-autocomplete syntax
 
-No autocomplete is performed for:
+No pair-autocomplete is added for:
 
 - superscript/subscript markers
 - underline markers
 - highlight markers
 
-## 5. Highlighting Rules
+## 6. Highlight Mapping
 
-- Blockquote markers and body receive a gray translucent background.
-- Strikethrough content uses strike-out font style.
-- `==highlight==` applies background highlight color to content.
-- `++underline++` applies underline font style to content.
-- Superscript/subscript content uses vertical alignment and reduced size.
-- Checkbox markers are highlighted with list bullet color.
-- Angle autolinks use link bracket/url colors.
-- Linked-image syntax colors image alt/url and outer link url distinctly.
+Key visual rules:
 
-## 6. Setext Consistency Rule
+- Blockquote marker/body: translucent gray background.
+- Strikethrough content: strike-out font style.
+- Underline content: font underline enabled.
+- Highlight content: background color (`searchHighlightBg`).
+- Superscript/subscript: vertical alignment plus reduced font size.
+- Checkbox marker: list bullet color.
+- Link brackets/text/url and image tokens are independently colorized.
+- Linked-image syntax applies image colors internally and link colors externally.
 
-Setext headings depend on the next line, which is a backward dependency.
-To keep rendering correct during live typing:
+## 7. Setext Refresh Safety
 
-- the highlighter queues a safe full refresh when a normal-context line may affect setext state (`-`, `=`, or empty lines)
-- refresh is queued (not reentrant) to avoid crashes
+Setext headings require a lookahead to the next block.
+To avoid stale formatting and crashes:
 
-## 7. Test Coverage Requirements
+- Potential setext-affecting edits queue a full rehighlight.
+- Rehighlight is queued through Qt event loop.
+- Reentrant highlighting is explicitly prevented.
 
-Edge-case coverage is required in:
+## 8. Edge Cases Required By This Spec
+
+- `\begin{align*}` environment parsing and autocomplete.
+- setext heading updates when underline is typed after heading text.
+- horizontal-rule/list ambiguity with compact and spaced forms.
+- quote continuation preserving indentation and depth.
+- angle brackets both as pair autocomplete and as autolink coloring.
+- nested linked-image syntax parsing/highlighting.
+- checkbox marker colorization for lowercase/uppercase checked states.
+- token format ranges staying in bounds for complex markdown samples.
+
+## 9. Test Matrix
+
+Primary files:
 
 - `tests/test_md_editor.cpp`
 - `tests/test_block_parser.cpp`
 - `tests/test_inline_parser.cpp`
 - `tests/test_highlighter.cpp`
 
-Minimum verification includes:
+Coverage includes:
 
-- pair autocomplete and closer-skip logic
-- multiline fence/env autocomplete behavior
-- blockquote continuation depth/indent
-- HR/list ambiguity on Enter
-- setext heading correctness after incremental edits
-- nested image link parsing/highlighting
-- checkbox coloring
-- strikethrough style and highlight background styling
+- pair insertion and closer skip-over
+- Enter-based multiline completion for `$$`, code fences, and `\begin{env}`
+- blockquote/list continuation behavior
+- block parser disambiguation (HR vs list, setext handling)
+- inline extension tokenization and malformed syntax rejection
+- highlighting correctness and format safety bounds
 
-## 8. Validation Command
+## 10. Validation Commands
 
 ```bash
+cmake -S . -B build
 cmake --build build -j$(nproc)
 cd build
 ctest --output-on-failure

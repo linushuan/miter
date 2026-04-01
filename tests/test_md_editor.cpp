@@ -153,6 +153,55 @@ private slots:
         QCOMPARE(editor_->textCursor().positionInBlock(), 2);
     }
 
+    void testBracketAutopairAtLineEnd_data()
+    {
+        QTest::addColumn<QString>("typed");
+        QTest::addColumn<QString>("expected");
+
+        QTest::newRow("square") << QString("[") << QString("[]");
+        QTest::newRow("curly") << QString("{") << QString("{}");
+    }
+
+    void testBracketAutopairAtLineEnd()
+    {
+        QFETCH(QString, typed);
+        QFETCH(QString, expected);
+
+        editor_->clear();
+        QTest::keyClicks(editor_, typed);
+
+        QCOMPARE(editor_->toPlainText(), expected);
+        QCOMPARE(editor_->textCursor().positionInBlock(), 1);
+    }
+
+    void testTypingClosingBracketSkipsExistingCloser_data()
+    {
+        QTest::addColumn<QString>("line");
+        QTest::addColumn<int>("cursorPos");
+        QTest::addColumn<QString>("typed");
+
+        QTest::newRow("square") << QString("[]") << 1 << QString("]");
+        QTest::newRow("curly") << QString("{}") << 1 << QString("}");
+    }
+
+    void testTypingClosingBracketSkipsExistingCloser()
+    {
+        QFETCH(QString, line);
+        QFETCH(int, cursorPos);
+        QFETCH(QString, typed);
+
+        editor_->setPlainText(line);
+
+        QTextCursor cursor = editor_->textCursor();
+        cursor.setPosition(cursorPos);
+        editor_->setTextCursor(cursor);
+
+        QTest::keyClicks(editor_, typed);
+
+        QCOMPARE(editor_->toPlainText(), line);
+        QCOMPARE(editor_->textCursor().positionInBlock(), cursorPos + 1);
+    }
+
     void testAngleBracketAutopairAndSkipOverCloser()
     {
         editor_->clear();
@@ -255,6 +304,36 @@ private slots:
         QCOMPARE(editor_->textCursor().positionInBlock(), 0);
     }
 
+    void testLatexBeginEnvWithIndentAndStarInNameCreatesClosingLine()
+    {
+        editor_->setPlainText("  \\begin{align*}");
+
+        QTextCursor cursor = editor_->textCursor();
+        cursor.movePosition(QTextCursor::End);
+        editor_->setTextCursor(cursor);
+
+        QTest::keyClick(editor_, Qt::Key_Return);
+
+        QCOMPARE(editor_->toPlainText(), QString("  \\begin{align*}\n  \n  \\end{align*}"));
+        QCOMPARE(editor_->textCursor().blockNumber(), 1);
+        QCOMPARE(editor_->textCursor().positionInBlock(), 2);
+    }
+
+    void testLatexBeginEnvWithTrailingContentDoesNotAutoClose()
+    {
+        editor_->setPlainText("\\begin{equation} x = 1");
+
+        QTextCursor cursor = editor_->textCursor();
+        cursor.movePosition(QTextCursor::End);
+        editor_->setTextCursor(cursor);
+
+        QTest::keyClick(editor_, Qt::Key_Return);
+
+        QCOMPARE(editor_->toPlainText(), QString("\\begin{equation} x = 1\n"));
+        QCOMPARE(editor_->textCursor().blockNumber(), 1);
+        QCOMPARE(editor_->textCursor().positionInBlock(), 0);
+    }
+
     void testLatexBeginEnvInBlockquoteKeepsPrefix()
     {
         editor_->setPlainText("> \\begin{align}");
@@ -330,6 +409,21 @@ private slots:
         QCOMPARE(editor_->toPlainText(), QString("   > > deep quote\n   > > "));
         QCOMPARE(editor_->textCursor().blockNumber(), 1);
         QCOMPARE(editor_->textCursor().positionInBlock(), 7);
+    }
+
+    void testBlockquoteEnterAutocompletesCompactPrefix()
+    {
+        editor_->setPlainText(">>compact");
+
+        QTextCursor cursor = editor_->textCursor();
+        cursor.movePosition(QTextCursor::End);
+        editor_->setTextCursor(cursor);
+
+        QTest::keyClick(editor_, Qt::Key_Return);
+
+        QCOMPARE(editor_->toPlainText(), QString(">>compact\n>> "));
+        QCOMPARE(editor_->textCursor().blockNumber(), 1);
+        QCOMPARE(editor_->textCursor().positionInBlock(), 3);
     }
 
     void testEnterAfterHorizontalRuleDoesNotStartList_data()
