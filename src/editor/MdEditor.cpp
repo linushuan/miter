@@ -48,7 +48,8 @@ void applyThemePalette(QPlainTextEdit *editor, const Theme &theme)
 QList<QInputMethodEvent::Attribute> normalizedPreeditAttributes(
     const QList<QInputMethodEvent::Attribute> &attributes,
     int preeditLength,
-    const QColor &foreground)
+    const QColor &foreground,
+    const QColor &background)
 {
     QList<QInputMethodEvent::Attribute> normalized;
     normalized.reserve(attributes.size() + 1);
@@ -68,6 +69,7 @@ QList<QInputMethodEvent::Attribute> normalizedPreeditAttributes(
             fmt = qvariant_cast<QTextCharFormat>(attr.value);
         }
         fmt.setForeground(foreground);
+        fmt.setBackground(background);
 
         normalized.push_back(QInputMethodEvent::Attribute(
             QInputMethodEvent::TextFormat,
@@ -79,6 +81,7 @@ QList<QInputMethodEvent::Attribute> normalizedPreeditAttributes(
     if (!hasTextFormat && preeditLength > 0) {
         QTextCharFormat fmt;
         fmt.setForeground(foreground);
+        fmt.setBackground(background);
         normalized.push_back(QInputMethodEvent::Attribute(
             QInputMethodEvent::TextFormat,
             0,
@@ -1193,7 +1196,8 @@ void MdEditor::inputMethodEvent(QInputMethodEvent *event)
         const auto attrs = normalizedPreeditAttributes(
             event->attributes(),
             event->preeditString().size(),
-            palette().color(QPalette::Text));
+            palette().color(QPalette::Text),
+            palette().color(QPalette::Base));
 
         QInputMethodEvent normalizedEvent(event->preeditString(), attrs);
         normalizedEvent.setCommitString(
