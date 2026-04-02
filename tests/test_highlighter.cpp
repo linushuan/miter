@@ -788,6 +788,43 @@ private slots:
         QCOMPARE(restoredContentFmt.foreground().color(), theme.boldFg);
     }
 
+    void testPreeditRangeDoesNotMutateCommittedFormats()
+    {
+        const Theme theme = Theme::darkDefault();
+        QTextDocument doc;
+        MdHighlighter highlighter(&doc, theme);
+
+        const QString text = QStringLiteral("**x23123**");
+        doc.setPlainText(text);
+        highlighter.rehighlight();
+
+        const QTextBlock block = doc.findBlockByNumber(0);
+        const int preeditPos = text.indexOf(QLatin1Char('x'));
+        QVERIFY(preeditPos > 1);
+
+        const QTextCharFormat beforePreeditFmt = formatAt(block, preeditPos);
+        QVERIFY(beforePreeditFmt.isValid());
+        QCOMPARE(beforePreeditFmt.foreground().color(), theme.boldFg);
+
+        highlighter.setPreeditRange(0, preeditPos, 1);
+
+        const QTextCharFormat markerFmt = formatAt(block, preeditPos - 1);
+        const QTextCharFormat preeditFmt = formatAt(block, preeditPos);
+        const QTextCharFormat nextFmt = formatAt(block, preeditPos + 1);
+        QVERIFY(markerFmt.isValid());
+        QVERIFY(preeditFmt.isValid());
+        QVERIFY(nextFmt.isValid());
+        QCOMPARE(markerFmt.foreground().color(), theme.markerFg);
+        QCOMPARE(preeditFmt.foreground().color(), theme.boldFg);
+        QCOMPARE(nextFmt.foreground().color(), theme.boldFg);
+
+        highlighter.clearPreeditRange();
+
+        const QTextCharFormat restoredPreeditFmt = formatAt(block, preeditPos);
+        QVERIFY(restoredPreeditFmt.isValid());
+        QCOMPARE(restoredPreeditFmt.foreground().color(), theme.boldFg);
+    }
+
     void testInlineTokenFormattingCoversWholeRange()
     {
         const Theme theme = Theme::darkDefault();

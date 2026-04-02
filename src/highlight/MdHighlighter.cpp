@@ -486,20 +486,17 @@ void MdHighlighter::highlightBlock(const QString &text)
         }
     }
 
-    auto applyPreeditRangeFormat = [&]() {
+    auto applyPreeditAnchorFormat = [&]() {
         if (preeditBlockNumber_ != currentBlock().blockNumber()) {
             return;
         }
-        if (preeditLength_ <= 0 || textLen <= 0) {
+        if (preeditStartInBlock_ < 0) {
             return;
         }
 
-        const int start = qBound(0, preeditStartInBlock_, textLen);
-        const int length = qBound(0, preeditLength_, textLen - start);
-        if (length <= 0) {
-            return;
-        }
-
+        // Zero-length anchor at insertion point: keeps committed text styling
+        // intact while exposing a clean base format for preedit merge.
+        const int anchorPos = qBound(0, preeditStartInBlock_, textLen);
         QTextCharFormat cleanFmt;
         cleanFmt.setForeground(theme_.foreground);
         cleanFmt.setFontWeight(QFont::Normal);
@@ -508,11 +505,11 @@ void MdHighlighter::highlightBlock(const QString &text)
         cleanFmt.setFontStrikeOut(false);
         cleanFmt.setVerticalAlignment(QTextCharFormat::AlignNormal);
         cleanFmt.setUnderlineStyle(QTextCharFormat::NoUnderline);
-        setFormat(start, length, cleanFmt);
+        setFormat(anchorPos, 0, cleanFmt);
     };
 
     if (blockType == BlockType::BlankLine) {
-        applyPreeditRangeFormat();
+        applyPreeditAnchorFormat();
         saveContext(ctx);
         setCurrentBlockState(static_cast<int>(ctx.topState()));
         return;
@@ -615,7 +612,7 @@ void MdHighlighter::highlightBlock(const QString &text)
     }
 
     // 5. Save context
-    applyPreeditRangeFormat();
+    applyPreeditAnchorFormat();
     saveContext(ctx);
     setCurrentBlockState(static_cast<int>(ctx.topState()));
 }

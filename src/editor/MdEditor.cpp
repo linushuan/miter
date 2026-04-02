@@ -22,6 +22,8 @@
 #include <QRegularExpression>
 #include <QHash>
 #include <QTimer>
+#include <QGuiApplication>
+#include <QInputMethod>
 #include <QFontInfo>
 #include <QFontDatabase>
 #include <QStringConverter>
@@ -1233,8 +1235,15 @@ void MdEditor::inputMethodEvent(QInputMethodEvent *event)
         imeComposing_ = true;
 
         QTextCursor cursor = textCursor();
+        const int docEndPos = qMax(0, document()->characterCount() - 1);
+        const int anchorPos = qBound(0, cursor.position() + event->replacementStart(), docEndPos);
+        if (anchorPos != cursor.position()) {
+            cursor.setPosition(anchorPos);
+            setTextCursor(cursor);
+        }
+
         preeditBlockNumber_ = cursor.blockNumber();
-        preeditStart_ = qMax(0, cursor.positionInBlock() + event->replacementStart());
+        preeditStart_ = qMax(0, cursor.positionInBlock());
 
         // Always normalize composing text color to editor foreground.
         QTextCharFormat cleanFmt;
@@ -1249,6 +1258,15 @@ void MdEditor::inputMethodEvent(QInputMethodEvent *event)
         cleanFmt.setUnderlineStyle(QTextCharFormat::NoUnderline);
         setCurrentCharFormat(cleanFmt);
 
+        QTextCursor formatCursor = textCursor();
+        formatCursor.clearSelection();
+        formatCursor.mergeCharFormat(cleanFmt);
+        setTextCursor(formatCursor);
+        if (QInputMethod *im = QGuiApplication::inputMethod()) {
+            im->update(Qt::ImQueryInput);
+            im->update(Qt::ImFont);
+        }
+
         preeditLength_ = event->preeditString().size();
         highlighter_->setPreeditRange(preeditBlockNumber_, preeditStart_, preeditLength_);
 
@@ -1262,9 +1280,21 @@ void MdEditor::inputMethodEvent(QInputMethodEvent *event)
         QInputMethodEvent normalizedEvent(event->preeditString(), attrs);
         normalizedEvent.setCommitString(
             event->commitString(),
-            event->replacementStart(),
+            0,
             event->replacementLength());
         QPlainTextEdit::inputMethodEvent(&normalizedEvent);
+
+        // Qt may refresh insertion format during IME handling. Re-apply a clean
+        // insertion format so subsequent preedit paints do not inherit style.
+        setCurrentCharFormat(cleanFmt);
+        QTextCursor postEventCursor = textCursor();
+        postEventCursor.clearSelection();
+        postEventCursor.mergeCharFormat(cleanFmt);
+        setTextCursor(postEventCursor);
+        if (QInputMethod *im = QGuiApplication::inputMethod()) {
+            im->update(Qt::ImQueryInput);
+            im->update(Qt::ImFont);
+        }
         return;
     }
 
@@ -1274,6 +1304,15 @@ void MdEditor::inputMethodEvent(QInputMethodEvent *event)
     preeditBlockNumber_ = -1;
     preeditStart_ = -1;
     preeditLength_ = 0;
+}
+
+QVariant MdEditor::inputMethodQuery(Qt::InputMethodQuery query) const
+{
+    if (imeComposing_ && query == Qt::ImFont) {
+        return QVariant::fromValue(font());
+    }
+
+    return QPlainTextEdit::inputMethodQuery(query);
 }
 
 void MdEditor::focusOutEvent(QFocusEvent *event)
