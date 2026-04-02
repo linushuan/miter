@@ -20,6 +20,8 @@ public:
     void setTheme(const Theme &theme);
     void setEnabled(bool enabled);
     void setBaseFontSize(int pointSize);
+    void setComposingPosition(int blockNumber, int posInBlock);
+    void clearComposingPosition();
 
     bool blockStartsInsideLatexDisplay(const QTextBlock &block, bool *known = nullptr) const;
     bool blockStartsInsideCodeFence(const QTextBlock &block, bool *known = nullptr) const;
@@ -50,4 +52,6 @@ private:
     bool tableSyncInProgress_ = false;
     bool tableRefreshPending_ = false;
     int baseFontSize_ = 14;
+    int composingBlockNumber_ = -1;
+    int composingPosInBlock_ = -1;
 };

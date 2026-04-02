@@ -655,6 +655,7 @@ void MdEditor::loadFile(const QString &path)
 {
     if (imeComposing_ || preeditLength_ > 0) {
         imeComposing_ = false;
+        highlighter_->clearComposingPosition();
         preeditBlockNumber_ = -1;
         preeditStart_ = -1;
         preeditLength_ = 0;
@@ -1199,6 +1200,8 @@ void MdEditor::inputMethodEvent(QInputMethodEvent *event)
         imeComposing_ = true;
 
         QTextCursor cursor = textCursor();
+        highlighter_->setComposingPosition(cursor.blockNumber(), cursor.positionInBlock());
+
         // Always normalize composing text color to editor foreground.
         QTextCharFormat cleanFmt;
         cleanFmt.setFont(font());
@@ -1228,6 +1231,7 @@ void MdEditor::inputMethodEvent(QInputMethodEvent *event)
 
     QPlainTextEdit::inputMethodEvent(event);
     imeComposing_ = false;
+    highlighter_->clearComposingPosition();
     preeditBlockNumber_ = -1;
     preeditStart_ = -1;
     preeditLength_ = 0;
@@ -1237,6 +1241,7 @@ void MdEditor::focusOutEvent(QFocusEvent *event)
 {
     if (imeComposing_ || preeditLength_ > 0) {
         imeComposing_ = false;
+        highlighter_->clearComposingPosition();
         preeditBlockNumber_ = -1;
         preeditStart_ = -1;
         preeditLength_ = 0;

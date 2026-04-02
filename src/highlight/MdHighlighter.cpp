@@ -8,6 +8,7 @@
 
 #include <QTextBlock>
 #include <QTextBlockUserData>
+#include <QTextDocument>
 #include <QRegularExpression>
 #include <QMetaObject>
 
@@ -118,6 +119,57 @@ void MdHighlighter::setBaseFontSize(int pointSize)
     baseFontSize_ = clamped;
     buildFormats();
     rehighlight();
+}
+
+void MdHighlighter::setComposingPosition(int blockNumber, int posInBlock)
+{
+    const int previousBlockNumber = composingBlockNumber_;
+    if (composingBlockNumber_ == blockNumber && composingPosInBlock_ == posInBlock) {
+        return;
+    }
+
+    composingBlockNumber_ = blockNumber;
+    composingPosInBlock_ = posInBlock;
+
+    QTextDocument *doc = document();
+    if (!doc) {
+        return;
+    }
+
+    if (previousBlockNumber >= 0) {
+        const QTextBlock previousBlock = doc->findBlockByNumber(previousBlockNumber);
+        if (previousBlock.isValid()) {
+            rehighlightBlock(previousBlock);
+        }
+    }
+
+    if (blockNumber >= 0) {
+        const QTextBlock composingBlock = doc->findBlockByNumber(blockNumber);
+        if (composingBlock.isValid()) {
+            rehighlightBlock(composingBlock);
+        }
+    }
+}
+
+void MdHighlighter::clearComposingPosition()
+{
+    if (composingBlockNumber_ < 0 && composingPosInBlock_ < 0) {
+        return;
+    }
+
+    const int previousBlockNumber = composingBlockNumber_;
+    composingBlockNumber_ = -1;
+    composingPosInBlock_ = -1;
+
+    QTextDocument *doc = document();
+    if (!doc || previousBlockNumber < 0) {
+        return;
+    }
+
+    const QTextBlock previousBlock = doc->findBlockByNumber(previousBlockNumber);
+    if (previousBlock.isValid()) {
+        rehighlightBlock(previousBlock);
+    }
 }
 
 void MdHighlighter::highlightBlock(const QString &text)
@@ -515,6 +567,15 @@ void MdHighlighter::highlightBlock(const QString &text)
     }
 
     // 5. Save context
+    // During IME preedit, force a clean base format at the cursor position.
+    if (composingBlockNumber_ == currentBlock().blockNumber() &&
+        composingPosInBlock_ >= 0 &&
+        composingPosInBlock_ < textLen) {
+        QTextCharFormat cleanFmt;
+        cleanFmt.setForeground(theme_.foreground);
+        setFormat(composingPosInBlock_, 1, cleanFmt);
+    }
+
     saveContext(ctx);
     setCurrentBlockState(static_cast<int>(ctx.topState()));
 }
