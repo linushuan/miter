@@ -49,7 +49,8 @@ QList<QInputMethodEvent::Attribute> normalizedPreeditAttributes(
     const QList<QInputMethodEvent::Attribute> &attributes,
     int preeditLength,
     const QColor &foreground,
-    const QColor &background)
+    const QColor &background,
+    const QFont &editorFont)
 {
     QList<QInputMethodEvent::Attribute> normalized;
     normalized.reserve(attributes.size() + 1);
@@ -62,14 +63,27 @@ QList<QInputMethodEvent::Attribute> normalizedPreeditAttributes(
         }
 
         hasTextFormat = true;
-        QTextCharFormat fmt;
+        QTextCharFormat imeAttr;
         if (attr.value.canConvert<QTextFormat>()) {
-            fmt = qvariant_cast<QTextFormat>(attr.value).toCharFormat();
+            imeAttr = qvariant_cast<QTextFormat>(attr.value).toCharFormat();
         } else if (attr.value.canConvert<QTextCharFormat>()) {
-            fmt = qvariant_cast<QTextCharFormat>(attr.value);
+            imeAttr = qvariant_cast<QTextCharFormat>(attr.value);
         }
+
+        QTextCharFormat fmt;
+        fmt.setFont(editorFont);
         fmt.setForeground(foreground);
         fmt.setBackground(background);
+
+        if (imeAttr.fontUnderline()) {
+            fmt.setFontUnderline(true);
+        }
+        if (imeAttr.underlineStyle() != QTextCharFormat::NoUnderline) {
+            fmt.setUnderlineStyle(imeAttr.underlineStyle());
+        }
+        if (imeAttr.underlineColor().isValid()) {
+            fmt.setUnderlineColor(imeAttr.underlineColor());
+        }
 
         normalized.push_back(QInputMethodEvent::Attribute(
             QInputMethodEvent::TextFormat,
@@ -80,6 +94,7 @@ QList<QInputMethodEvent::Attribute> normalizedPreeditAttributes(
 
     if (!hasTextFormat && preeditLength > 0) {
         QTextCharFormat fmt;
+        fmt.setFont(editorFont);
         fmt.setForeground(foreground);
         fmt.setBackground(background);
         normalized.push_back(QInputMethodEvent::Attribute(
@@ -1186,7 +1201,9 @@ void MdEditor::inputMethodEvent(QInputMethodEvent *event)
         QTextCursor cursor = textCursor();
         // Always normalize composing text color to editor foreground.
         QTextCharFormat cleanFmt;
+        cleanFmt.setFont(font());
         cleanFmt.setForeground(palette().color(QPalette::Text));
+        cleanFmt.setBackground(palette().color(QPalette::Base));
         setCurrentCharFormat(cleanFmt);
 
         preeditBlockNumber_ = cursor.blockNumber();
@@ -1197,7 +1214,8 @@ void MdEditor::inputMethodEvent(QInputMethodEvent *event)
             event->attributes(),
             event->preeditString().size(),
             palette().color(QPalette::Text),
-            palette().color(QPalette::Base));
+            palette().color(QPalette::Base),
+            font());
 
         QInputMethodEvent normalizedEvent(event->preeditString(), attrs);
         normalizedEvent.setCommitString(

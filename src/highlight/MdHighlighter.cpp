@@ -412,6 +412,12 @@ void MdHighlighter::highlightBlock(const QString &text)
         }
     }
 
+    if (blockType == BlockType::BlankLine) {
+        saveContext(ctx);
+        setCurrentBlockState(static_cast<int>(ctx.topState()));
+        return;
+    }
+
     if (blockType == BlockType::Table) {
         const int tableOffset = computeContentOffset(blockTokens);
         const int tableLength = textLen - tableOffset;
