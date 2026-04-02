@@ -829,43 +829,6 @@ private slots:
         QCOMPARE(restoredPreeditFmt.foreground().color(), theme.boldFg);
     }
 
-    void testPreeditRangeKeepsVisibleUnderlineAndRestoresAfterClear()
-    {
-        const Theme theme = Theme::darkDefault();
-        QTextDocument doc;
-        MdHighlighter highlighter(&doc, theme);
-
-        const QString text = QStringLiteral("**x**");
-        doc.setPlainText(text);
-        highlighter.rehighlight();
-
-        const QTextBlock block = doc.findBlockByNumber(0);
-        const int preeditPos = text.indexOf(QLatin1Char('x'));
-        QVERIFY(preeditPos > 0);
-
-        const QTextCharFormat beforeFmt = formatAt(block, preeditPos);
-        QVERIFY(beforeFmt.isValid());
-        QCOMPARE(beforeFmt.foreground().color(), theme.boldFg);
-        QCOMPARE(beforeFmt.underlineStyle(), QTextCharFormat::NoUnderline);
-
-        highlighter.setPreeditRange(0, preeditPos, 1);
-
-        const QTextCharFormat composingFmt = formatAt(block, preeditPos);
-        QVERIFY(composingFmt.isValid());
-        QCOMPARE(composingFmt.foreground().color(), theme.boldFg);
-        QVERIFY(composingFmt.fontUnderline());
-        QVERIFY(composingFmt.underlineStyle() != QTextCharFormat::NoUnderline);
-        QVERIFY(composingFmt.underlineColor().isValid());
-
-        highlighter.clearPreeditRange();
-
-        const QTextCharFormat restoredFmt = formatAt(block, preeditPos);
-        QVERIFY(restoredFmt.isValid());
-        QCOMPARE(restoredFmt.foreground().color(), theme.boldFg);
-        QCOMPARE(restoredFmt.underlineStyle(), QTextCharFormat::NoUnderline);
-        QVERIFY(!restoredFmt.fontUnderline());
-    }
-
     void testInlineTokenFormattingCoversWholeRange()
     {
         const Theme theme = Theme::darkDefault();

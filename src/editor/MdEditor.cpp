@@ -1285,6 +1285,18 @@ void MdEditor::inputMethodEvent(QInputMethodEvent *event)
             0,
             event->replacementLength());
         QPlainTextEdit::inputMethodEvent(&normalizedEvent);
+
+        // Qt may refresh insertion format during IME handling. Re-apply a clean
+        // insertion format so subsequent preedit paints do not inherit style.
+        setCurrentCharFormat(cleanFmt);
+        QTextCursor postEventCursor = textCursor();
+        postEventCursor.clearSelection();
+        postEventCursor.mergeCharFormat(cleanFmt);
+        setTextCursor(postEventCursor);
+        if (QInputMethod *im = QGuiApplication::inputMethod()) {
+            im->update(Qt::ImQueryInput);
+            im->update(Qt::ImFont);
+        }
         return;
     }
 
