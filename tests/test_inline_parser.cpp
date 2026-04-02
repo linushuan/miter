@@ -23,6 +23,24 @@ private slots:
         QCOMPARE(tokens[2].type, TokenType::BoldMarker);
     }
 
+    void testBoldInsideWord()
+    {
+        ContextStack ctx;
+        QVector<InlineToken> tokens;
+        const QString text = QStringLiteral("hello**world**tail");
+        InlineParser::parse(text, 0, ctx, tokens);
+
+        bool foundBold = false;
+        for (const auto &token : tokens) {
+            if (token.type == TokenType::Bold && text.mid(token.start, token.length) == QStringLiteral("world")) {
+                foundBold = true;
+                break;
+            }
+        }
+
+        QVERIFY(foundBold);
+    }
+
     void testItalic()
     {
         ContextStack ctx;
@@ -33,6 +51,24 @@ private slots:
         QCOMPARE(tokens[0].type, TokenType::ItalicMarker);
         QCOMPARE(tokens[1].type, TokenType::Italic);
         QCOMPARE(tokens[2].type, TokenType::ItalicMarker);
+    }
+
+    void testItalicInsideWord()
+    {
+        ContextStack ctx;
+        QVector<InlineToken> tokens;
+        const QString text = QStringLiteral("hello*world*tail");
+        InlineParser::parse(text, 0, ctx, tokens);
+
+        bool foundItalic = false;
+        for (const auto &token : tokens) {
+            if (token.type == TokenType::Italic && text.mid(token.start, token.length) == QStringLiteral("world")) {
+                foundItalic = true;
+                break;
+            }
+        }
+
+        QVERIFY(foundItalic);
     }
 
     void testInlineCode()
@@ -294,6 +330,24 @@ private slots:
         QCOMPARE(tokens[0].type, TokenType::StrikeMarker);
         QCOMPARE(tokens[1].type, TokenType::Strikethrough);
         QCOMPARE(tokens[2].type, TokenType::StrikeMarker);
+    }
+
+    void testStrikethroughInsideWord()
+    {
+        ContextStack ctx;
+        QVector<InlineToken> tokens;
+        const QString text = QStringLiteral("hello~~strike~~tail");
+        InlineParser::parse(text, 0, ctx, tokens);
+
+        bool foundStrike = false;
+        for (const auto &token : tokens) {
+            if (token.type == TokenType::Strikethrough && text.mid(token.start, token.length) == QStringLiteral("strike")) {
+                foundStrike = true;
+                break;
+            }
+        }
+
+        QVERIFY(foundStrike);
     }
 
     void testStrikethroughRejectsInvalidFlanking()

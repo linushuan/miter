@@ -120,25 +120,6 @@ void MdHighlighter::setBaseFontSize(int pointSize)
     rehighlight();
 }
 
-void MdHighlighter::setPreeditRange(int blockNumber, int start, int length)
-{
-    if (blockNumber < 0 || length <= 0) {
-        clearPreeditRange();
-        return;
-    }
-
-    preeditBlockNumber_ = blockNumber;
-    preeditStart_ = qMax(0, start);
-    preeditLength_ = length;
-}
-
-void MdHighlighter::clearPreeditRange()
-{
-    preeditBlockNumber_ = -1;
-    preeditStart_ = -1;
-    preeditLength_ = 0;
-}
-
 void MdHighlighter::highlightBlock(const QString &text)
 {
     // Always restore/classify/save context so incremental block state stays
@@ -421,30 +402,7 @@ void MdHighlighter::highlightBlock(const QString &text)
             setFormat(rangeStart, rangeLength, fmt);
         };
 
-        const bool hasPreeditInCurrentBlock =
-            preeditLength_ > 0 &&
-            preeditBlockNumber_ == currentBlock().blockNumber();
-
-        if (!hasPreeditInCurrentBlock) {
-            applyPreparedFormat(start, length);
-            return;
-        }
-
-        const int rangeStart = qMax(0, start);
-        const int rangeEnd = qMax(rangeStart, start + length);
-        const int preeditStart = qMax(0, preeditStart_);
-        const int preeditEnd = preeditStart + preeditLength_;
-
-        const int overlapStart = qMax(rangeStart, preeditStart);
-        const int overlapEnd = qMin(rangeEnd, preeditEnd);
-
-        if (overlapStart >= overlapEnd) {
-            applyPreparedFormat(rangeStart, rangeEnd - rangeStart);
-            return;
-        }
-
-        applyPreparedFormat(rangeStart, overlapStart - rangeStart);
-        applyPreparedFormat(overlapEnd, rangeEnd - overlapEnd);
+        applyPreparedFormat(start, length);
     };
 
     // 3. Apply block token formats

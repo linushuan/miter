@@ -640,7 +640,6 @@ void MdEditor::loadFile(const QString &path)
         preeditBlockNumber_ = -1;
         preeditStart_ = -1;
         preeditLength_ = 0;
-        highlighter_->clearPreeditRange();
     }
 
     QFile file(path);
@@ -1183,15 +1182,13 @@ void MdEditor::inputMethodEvent(QInputMethodEvent *event)
 
         QTextCursor cursor = textCursor();
         // Always normalize composing text color to editor foreground.
-        QTextCharFormat preeditCaretFmt;
-        preeditCaretFmt.setForeground(palette().color(QPalette::Text));
-        mergeCurrentCharFormat(preeditCaretFmt);
-        cursor = textCursor();
+        QTextCharFormat cleanFmt;
+        cleanFmt.setForeground(palette().color(QPalette::Text));
+        setCurrentCharFormat(cleanFmt);
 
         preeditBlockNumber_ = cursor.blockNumber();
         preeditStart_ = qMax(0, cursor.positionInBlock() + event->replacementStart());
         preeditLength_ = event->preeditString().size();
-        highlighter_->setPreeditRange(preeditBlockNumber_, preeditStart_, preeditLength_);
 
         const auto attrs = normalizedPreeditAttributes(
             event->attributes(),
@@ -1212,7 +1209,6 @@ void MdEditor::inputMethodEvent(QInputMethodEvent *event)
     preeditBlockNumber_ = -1;
     preeditStart_ = -1;
     preeditLength_ = 0;
-    highlighter_->clearPreeditRange();
 }
 
 void MdEditor::focusOutEvent(QFocusEvent *event)
@@ -1222,7 +1218,6 @@ void MdEditor::focusOutEvent(QFocusEvent *event)
         preeditBlockNumber_ = -1;
         preeditStart_ = -1;
         preeditLength_ = 0;
-        highlighter_->clearPreeditRange();
     }
 
     QPlainTextEdit::focusOutEvent(event);

@@ -713,34 +713,22 @@ private slots:
         }
     }
 
-    void testPreeditRangeSkipsInlineTokenFormattingOnlyInsideRange()
+    void testInlineTokenFormattingCoversWholeRange()
     {
         const Theme theme = Theme::darkDefault();
         QTextDocument doc;
         MdHighlighter highlighter(&doc, theme);
 
-        doc.setPlainText("**abc**");
+        doc.setPlainText("hello**world**");
         highlighter.rehighlight();
 
         QTextBlock block = doc.findBlockByNumber(0);
-        QCOMPARE(formatAt(block, 2).foreground().color(), theme.boldFg);
-        QCOMPARE(formatAt(block, 3).foreground().color(), theme.boldFg);
-        QCOMPARE(formatAt(block, 4).foreground().color(), theme.boldFg);
+        const int wPos = doc.toPlainText().indexOf("world");
+        QVERIFY(wPos >= 0);
 
-        // Simulate IME preedit over the middle character 'b'.
-        highlighter.setPreeditRange(0, 3, 1);
-        highlighter.rehighlight();
-
-        block = doc.findBlockByNumber(0);
-        const QTextCharFormat preeditFmt = formatAt(block, 3);
-        QVERIFY(!preeditFmt.isValid() || preeditFmt.foreground().color() != theme.boldFg);
-        QCOMPARE(formatAt(block, 2).foreground().color(), theme.boldFg);
-        QCOMPARE(formatAt(block, 4).foreground().color(), theme.boldFg);
-
-        highlighter.clearPreeditRange();
-        highlighter.rehighlight();
-        block = doc.findBlockByNumber(0);
-        QCOMPARE(formatAt(block, 3).foreground().color(), theme.boldFg);
+        for (int i = 0; i < 5; ++i) {
+            QCOMPARE(formatAt(block, wPos + i).foreground().color(), theme.boldFg);
+        }
     }
 };
 

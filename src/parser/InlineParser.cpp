@@ -503,29 +503,20 @@ bool InlineParser::tryHardBreak(State &s)
 
 bool InlineParser::isLeftFlanking(const QString &text, int markerStart, int markerLen)
 {
-    // After the marker run: must not be whitespace
+    // Opening marker: next char must exist and not be whitespace.
     int afterPos = markerStart + markerLen;
     if (afterPos >= text.length()) return false;
     QChar after = text[afterPos];
     if (after.isSpace()) return false;
-
-    // Before the marker run: must be boundary (start of line, space, punct, CJK)
-    if (markerStart == 0) return true;
-    QChar before = text[markerStart - 1];
-    return CjkUtil::isBoundary(before);
+    return true;
 }
 
 bool InlineParser::isRightFlanking(const QString &text, int markerStart, int markerLen)
 {
     Q_UNUSED(markerLen);
-    // Before the marker: must not be whitespace
+    // Closing marker: previous char must exist and not be whitespace.
     if (markerStart == 0) return false;
     QChar before = text[markerStart - 1];
     if (before.isSpace()) return false;
-
-    // After the marker: must be boundary (end of line, space, punct, CJK)
-    int afterPos = markerStart + markerLen;
-    if (afterPos >= text.length()) return true;
-    QChar after = text[afterPos];
-    return CjkUtil::isBoundary(after);
+    return true;
 }
