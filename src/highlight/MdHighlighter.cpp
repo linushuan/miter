@@ -11,6 +11,8 @@
 #include <QTextDocument>
 #include <QRegularExpression>
 #include <QMetaObject>
+#include <QTimer>
+#include <QDateTime>
 
 // Store ContextStack in QTextBlockUserData
 class ContextBlockData : public QTextBlockUserData {
@@ -46,6 +48,31 @@ static bool looksLikeSetextMutationCandidate(const QString &text)
     }
 
     return markerCount >= 2;
+}
+
+static bool isListLine(const QString &text)
+{
+    return BlockParser::parseOrderedListLine(text) ||
+           BlockParser::parseUnorderedListLine(text);
+}
+
+static bool couldBeSetextHeadingTextLine(const QString &text)
+{
+    const QString trimmed = text.trimmed();
+    if (trimmed.isEmpty()) {
+        return false;
+    }
+
+    if (BlockParser::isSetextH1Underline(text) ||
+        BlockParser::isSetextH2Underline(text)) {
+        return false;
+    }
+
+    if (BlockParser::isHorizontalRule(text) || isListLine(text)) {
+        return false;
+    }
+
+    return true;
 }
 
 bool MdHighlighter::blockStartsInsideLatexDisplay(const QTextBlock &block, bool *known) const
@@ -88,6 +115,21 @@ MdHighlighter::MdHighlighter(QTextDocument *parent, const Theme &theme)
     : QSyntaxHighlighter(parent)
     , theme_(theme)
 {
+    tableRefreshTimer_ = new QTimer(this);
+    tableRefreshTimer_->setSingleShot(true);
+    connect(tableRefreshTimer_, &QTimer::timeout, this, [this]() {
+        if (tableSyncInProgress_) {
+            tableRefreshTimer_->start(tableRefreshDebounceMs_);
+            return;
+        }
+
+        tableSyncInProgress_ = true;
+        rehighlight();
+        tableSyncInProgress_ = false;
+        lastTableRefreshMs_ = QDateTime::currentMSecsSinceEpoch();
+        tableRefreshPending_ = false;
+    });
+
     buildFormats();
 }
 
@@ -216,18 +258,25 @@ void MdHighlighter::highlightBlock(const QString &text)
 
     const int textLen = static_cast<int>(text.length());
 
-    auto queueTableRefresh = [&]() {
-        if (tableSyncInProgress_ || tableRefreshPending_) {
+    auto queueTableRefresh = [&](bool forceImmediate = false) {
+        if (tableSyncInProgress_ || !tableRefreshTimer_) {
             return;
         }
 
+        int delayMs = 0;
+        if (!forceImmediate) {
+            const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+            if (lastTableRefreshMs_ >= 0) {
+                const qint64 elapsedSinceLast = nowMs - lastTableRefreshMs_;
+                if (elapsedSinceLast < tableRefreshDebounceMs_) {
+                    delayMs = static_cast<int>(tableRefreshDebounceMs_ - elapsedSinceLast);
+                }
+            }
+        }
+
         tableRefreshPending_ = true;
-        QMetaObject::invokeMethod(this, [this]() {
-            tableSyncInProgress_ = true;
-            rehighlight();
-            tableSyncInProgress_ = false;
-            tableRefreshPending_ = false;
-        }, Qt::QueuedConnection);
+        // Run immediately for structural changes, throttle noisy burst updates.
+        tableRefreshTimer_->start(delayMs);
     };
 
     // Setext headings depend on the next line. Queue a single full refresh
@@ -250,9 +299,12 @@ void MdHighlighter::highlightBlock(const QString &text)
             prevBlock.isValid() &&
             !prevBlock.text().trimmed().isEmpty() &&
             !nextBlock.isValid();
+        const bool prevLineCouldBeHeading =
+            prevBlock.isValid() &&
+            couldBeSetextHeadingTextLine(prevBlock.text());
         const bool maybeSetextRelated =
             currentIsSetextUnderline ||
-            looksLikeSetextMutationCandidate(text) ||
+            (looksLikeSetextMutationCandidate(text) && prevLineCouldBeHeading) ||
             trailingBlankAfterText ||
             hasAdjacentSetextUnderline;
 
@@ -416,7 +468,7 @@ void MdHighlighter::highlightBlock(const QString &text)
             (currentIsTableRow && adjacentTableLike) ||
             blankBetweenTableLikeRows) {
             // Incremental highlight can miss table state propagation across unchanged blocks.
-            queueTableRefresh();
+            queueTableRefresh(currentIsSeparator);
         }
     }
 
@@ -534,7 +586,7 @@ void MdHighlighter::highlightBlock(const QString &text)
                 const QString prevTableText = prevText.mid(qMin(tableOffset, static_cast<int>(prevText.length())));
                 if (BlockParser::matchTable(prevTableText)) {
                     // Header line depends on separator below, so refresh once.
-                    queueTableRefresh();
+                    queueTableRefresh(true);
                 }
             }
         }

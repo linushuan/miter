@@ -648,6 +648,12 @@ MdEditor::MdEditor(QWidget *parent)
         statusStatsTimer_->setInterval(150);
         connect(statusStatsTimer_, &QTimer::timeout,
             this, &MdEditor::recomputeWordCountStats);
+        connect(document(), &QTextDocument::contentsChanged,
+            this, [this]() {
+                if (statusStatsTimer_) {
+                    statusStatsTimer_->start();
+                }
+            });
 
     // Connect signals for line number area
     connect(this, &QPlainTextEdit::blockCountChanged,
@@ -667,13 +673,14 @@ MdEditor::MdEditor(QWidget *parent)
 
     // Initial setup
     updateLineNumberAreaWidth(0);
-    highlightCurrentLine();
 
     // Apply theme colors.
     applyThemePalette(this, theme);
     currentLineBg_ = theme.currentLineBg;
     lineNumberFg_ = theme.lineNumberFg;
     lineNumberBg_ = theme.lineNumberBg;
+    lastHighlightedBlock_ = -1;
+    highlightCurrentLine();
 
     // Apply configured font and editor behavior.
     applyEditorFont(settings.fontFamily, settings.fontSize);
@@ -1404,6 +1411,7 @@ void MdEditor::setThemeName(const QString &themeName)
     lineNumberFg_ = theme.lineNumberFg;
     lineNumberBg_ = theme.lineNumberBg;
     lineNumberArea_->update();
+    lastHighlightedBlock_ = -1;
     highlightCurrentLine();
     viewport()->update();
 }
@@ -1730,12 +1738,20 @@ void MdEditor::updateLineNumberArea(const QRect &rect, int dy)
 
 void MdEditor::highlightCurrentLine()
 {
+    const QTextCursor cursor = textCursor();
+    const int currentBlock = cursor.blockNumber();
+    const bool readOnly = isReadOnly();
+
+    if (currentBlock == lastHighlightedBlock_ &&
+        focusModeEnabled_ == lastHighlightFocusMode_ &&
+        readOnly == lastHighlightReadOnly_) {
+        return;
+    }
+
     QList<QTextEdit::ExtraSelection> extraSelections;
 
-    if (!isReadOnly()) {
+    if (!readOnly) {
         if (focusModeEnabled_) {
-            QTextCursor current = textCursor();
-            const int currentBlock = current.blockNumber();
             const QRect visibleRect = viewport()->rect();
 
             QColor dimColor = palette().text().color();
@@ -1766,11 +1782,15 @@ void MdEditor::highlightCurrentLine()
         QTextEdit::ExtraSelection selection;
         selection.format.setBackground(currentLineBg_);
         selection.format.setProperty(QTextFormat::FullWidthSelection, true);
-        selection.cursor = textCursor();
+        selection.cursor = cursor;
         selection.cursor.clearSelection();
         extraSelections.append(selection);
     }
+
     setExtraSelections(extraSelections);
+    lastHighlightedBlock_ = currentBlock;
+    lastHighlightFocusMode_ = focusModeEnabled_;
+    lastHighlightReadOnly_ = readOnly;
 }
 
 void MdEditor::updateStatusStats()

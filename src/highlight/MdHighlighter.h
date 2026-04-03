@@ -12,6 +12,7 @@
 #include "config/Theme.h"
 
 class QTextBlock;
+class QTimer;
 
 class MdHighlighter : public QSyntaxHighlighter {
     Q_OBJECT
@@ -53,6 +54,9 @@ private:
     bool setextRefreshPending_ = false;
     bool tableSyncInProgress_ = false;
     bool tableRefreshPending_ = false;
+    QTimer *tableRefreshTimer_ = nullptr;
+    int tableRefreshDebounceMs_ = 80;
+    qint64 lastTableRefreshMs_ = -1;
     int baseFontSize_ = 14;
     int preeditBlockNumber_ = -1;
     int preeditStartInBlock_ = -1;

@@ -65,6 +65,9 @@ private:
     MdHighlighter  *highlighter_;
     QString         currentFile_;
     bool            focusModeEnabled_ = false;
+    int             lastHighlightedBlock_ = -1;
+    bool            lastHighlightFocusMode_ = false;
+    bool            lastHighlightReadOnly_ = false;
     bool            lineNumbersVisible_ = true;
     QString         themeName_ = "dark";
     int             baseFontSize_ = 14;
