@@ -650,7 +650,7 @@ MdEditor::MdEditor(QWidget *parent)
             this, &MdEditor::recomputeWordCountStats);
         connect(document(), &QTextDocument::contentsChanged,
             this, [this]() {
-                if (statusStatsTimer_) {
+                if (statusStatsTimer_ && cachedDocRevision_ != document()->revision()) {
                     statusStatsTimer_->start();
                 }
             });

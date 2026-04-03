@@ -124,10 +124,10 @@ MdHighlighter::MdHighlighter(QTextDocument *parent, const Theme &theme)
         }
 
         tableSyncInProgress_ = true;
+        tableRefreshPending_ = false;
         rehighlight();
         tableSyncInProgress_ = false;
         lastTableRefreshMs_ = QDateTime::currentMSecsSinceEpoch();
-        tableRefreshPending_ = false;
     });
 
     buildFormats();
