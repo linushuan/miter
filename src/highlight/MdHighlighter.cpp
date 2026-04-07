@@ -584,7 +584,10 @@ void MdHighlighter::highlightBlock(const QString &text)
         cleanFmt.setFontUnderline(false);
         cleanFmt.setFontStrikeOut(false);
         cleanFmt.setVerticalAlignment(QTextCharFormat::AlignNormal);
-        cleanFmt.setUnderlineStyle(QTextCharFormat::NoUnderline);
+        // Some IME/Qt stacks partially inherit preedit style from this anchor.
+        // Keep a visible fallback underline so composing text does not look plain.
+        cleanFmt.setUnderlineStyle(QTextCharFormat::DashUnderline);
+        cleanFmt.setUnderlineColor(theme_.foreground);
 
         // Use previous real character as preedit base source for Qt merge.
         setFormat(preeditStartInBlock_ - 1, 1, cleanFmt);
