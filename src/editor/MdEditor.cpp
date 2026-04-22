@@ -1248,7 +1248,7 @@ bool MdEditor::handleEnterKey(QKeyEvent *event)
         return true;
     }
 
-    if (paragraphIndent > 0) {
+    if (paragraphIndent > 0 && !isBlankLine(currentLine)) {
         insertPlainText(QString(paragraphIndent, QLatin1Char(' ')));
     }
 

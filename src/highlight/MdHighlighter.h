@@ -57,7 +57,7 @@ private:
     bool tableRefreshPending_ = false;
     bool rehighlightInProgress_ = false;
     QTimer *tableRefreshTimer_ = nullptr;
-    int tableRefreshDebounceMs_ = 80;
+    int tableRefreshDebounceMs_ = 300;
     qint64 lastTableRefreshMs_ = -1;
     int baseFontSize_ = 14;
     int preeditBlockNumber_ = -1;

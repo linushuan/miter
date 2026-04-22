@@ -458,7 +458,7 @@ void MdHighlighter::highlightBlock(const QString &text)
 
     auto hasSeparatorAnchorAbove = [&](QTextBlock scan) {
         int guard = 0;
-        while (scan.isValid() && guard < 256) {
+        while (scan.isValid() && guard < 32) {
             const QString scanContent = tableContentAtOffset(scan);
             if (scanContent.trimmed().isEmpty()) {
                 return false;
@@ -584,10 +584,10 @@ void MdHighlighter::highlightBlock(const QString &text)
         cleanFmt.setFontUnderline(false);
         cleanFmt.setFontStrikeOut(false);
         cleanFmt.setVerticalAlignment(QTextCharFormat::AlignNormal);
-        // Some IME/Qt stacks partially inherit preedit style from this anchor.
-        // Keep a visible fallback underline so composing text does not look plain.
-        cleanFmt.setUnderlineStyle(QTextCharFormat::DashUnderline);
-        cleanFmt.setUnderlineColor(theme_.foreground);
+        // Neutral anchor: prevents highlight style from bleeding into the IME
+        // composition overlay. Do not add underline here — it would visually
+        // corrupt the character before the composing text.
+        cleanFmt.setUnderlineStyle(QTextCharFormat::NoUnderline);
 
         // Use previous real character as preedit base source for Qt merge.
         setFormat(preeditStartInBlock_ - 1, 1, cleanFmt);
