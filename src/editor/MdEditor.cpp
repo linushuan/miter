@@ -1312,9 +1312,17 @@ void MdEditor::inputMethodEvent(QInputMethodEvent *event)
             event->replacementLength());
         QPlainTextEdit::inputMethodEvent(&normalizedEvent);
 
-        // Keep insertion format clean, but do not merge it back onto cursor
-        // right after preedit dispatch: some IME stacks may lose underline.
+        // Qt may refresh insertion format during IME handling. Re-apply a clean
+        // insertion format so subsequent preedit paints do not inherit style.
         setCurrentCharFormat(cleanFmt);
+        QTextCursor postEventCursor = textCursor();
+        postEventCursor.clearSelection();
+        postEventCursor.mergeCharFormat(cleanFmt);
+        setTextCursor(postEventCursor);
+        if (QInputMethod *im = QGuiApplication::inputMethod()) {
+            im->update(Qt::ImQueryInput);
+            im->update(Qt::ImFont);
+        }
         return;
     }
 
